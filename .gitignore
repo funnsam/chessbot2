@@ -1,0 +1,5 @@
+target
+*.pgn
+*.zip
+/config.json
+/engines

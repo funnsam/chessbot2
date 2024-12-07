@@ -1,0 +1,8 @@
+[package]
+name = "chessbot2-uci"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chess = "3.2.0"
+chessbot2 = { version = "0.1.0", path = ".." }
