@@ -66,8 +66,14 @@ impl Engine {
 
         let mut best = EVAL_MIN;
 
-        for m in chess::MoveGen::new_legal(game.board()) {
-            let game = game.make_move(m);
+        let mut moves: Vec<_> = chess::MoveGen::new_legal(game.board())
+            .map(|m| game.make_move(m))
+            .collect();
+        moves.sort_unstable_by_key(|game| {
+            self.trans_table.get(game.board().get_hash()).map_or(EVAL_MIN, |t| t.eval)
+        });
+
+        for game in moves {
             let (neg_eval, nt) = self.evaluate_search(&game, depth - 1, -beta, -alpha);
             if self.times_up() { return (best, NodeType::None); }
 
