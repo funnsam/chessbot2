@@ -26,7 +26,10 @@ impl Engine {
             .map(|m| (m, self.game.make_move(m)))
             .collect();
         moves.sort_unstable_by_key(|(_, game)| {
-            self.trans_table.get(game.board().get_hash()).map_or(EVAL_MIN, |t| t.eval)
+            self.trans_table.get(game.board().get_hash()).map_or_else(
+                || evaluate_static(game.board()),
+                |t| t.eval,
+            )
         });
 
         for (m, game) in moves {
@@ -43,7 +46,7 @@ impl Engine {
         best
     }
 
-    /// Perform an principal variation (fail-soft) negamax search and return the evaluation
+    /// Perform a principal variation (fail-soft) negamax search and return the evaluation
     pub fn evaluate_search(
         &self,
         game: &Game,
@@ -77,7 +80,10 @@ impl Engine {
             .map(|m| game.make_move(m))
             .collect();
         moves.sort_unstable_by_key(|game| {
-            self.trans_table.get(game.board().get_hash()).map_or(EVAL_MIN, |t| t.eval)
+            self.trans_table.get(game.board().get_hash()).map_or_else(
+                || evaluate_static(game.board()),
+                |t| t.eval,
+            )
         });
 
         for (i, game) in moves.into_iter().enumerate() {
@@ -85,11 +91,14 @@ impl Engine {
                 self.evaluate_search(&game, depth - 1, -beta, -alpha)
             } else {
                 let (neg_eval, nt) = self.evaluate_search(&game, depth - 1, -alpha - 1, -alpha);
+
                 if alpha < -neg_eval && -neg_eval < beta && beta - alpha > 1 {
+                    if self.times_up() { return (best, NodeType::None); }
+
                     // PVS: perform full search if non-pv nodes are better than expected
                     self.evaluate_search(&game, depth - 1, -beta, -alpha)
                 } else {
-                    (neg_eval, nt)
+                    (neg_eval, NodeType::None)
                 }
             };
             if self.times_up() { return (best, NodeType::None); }
