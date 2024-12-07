@@ -21,8 +21,14 @@ impl Engine {
         let mut alpha = EVAL_MIN;
         let mut best = (chess::ChessMove::default(), EVAL_MIN - 1);
 
-        for m in chess::MoveGen::new_legal(self.game.board()) {
-            let game = self.game.make_move(m);
+        let mut moves: Vec<_> = chess::MoveGen::new_legal(self.game.board())
+            .map(|m| (m, self.game.make_move(m)))
+            .collect();
+        moves.sort_unstable_by_key(|(_, game)| {
+            self.trans_table.get(game.board().get_hash()).map_or(EVAL_MIN, |t| t.eval)
+        });
+
+        for (m, game) in moves {
             let (neg_eval, _nt) = self.evaluate_search(&game, depth - 1, EVAL_MIN, -alpha);
             let eval = -neg_eval;
             if depth != 1 && self.times_up() { break; }
