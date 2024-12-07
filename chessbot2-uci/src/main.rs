@@ -35,8 +35,8 @@ fn main() {
                     btime
                 };
 
-                let (mov, eval) = engine.best_move_iter_deep();
-                println!("info score cp {eval}");
+                let (mov, eval, depth) = engine.best_move_iter_deep();
+                println!("info score cp {eval} seldepth {depth} depth {depth}");
                 println!("bestmove {mov}");
             },
             None => println!("info string got unknown command {l}"),

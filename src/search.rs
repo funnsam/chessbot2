@@ -1,17 +1,18 @@
 use crate::{*, eval::*, trans_table::*};
 
 impl Engine {
-    pub fn best_move_iter_deep(&mut self) -> (chess::ChessMove, Eval) {
+    pub fn best_move_iter_deep(&mut self) -> (chess::ChessMove, Eval, usize) {
         self.time_ref = Instant::now();
         self.reserve_time();
 
-        let mut prev = self.best_move(1);
+        let prev = self.best_move(1);
+        let mut prev = (prev.0, prev.1, 1);
 
         for depth in 2.. {
             let this = self.best_move(depth);
             if self.times_up() { break; }
 
-            prev = this;
+            prev = (this.0, this.1, depth);
         }
 
         prev
