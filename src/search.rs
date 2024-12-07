@@ -1,17 +1,18 @@
 use crate::{*, eval::*, trans_table::*};
 
 impl Engine {
-    pub fn best_move_iter_deep(&mut self) -> (chess::ChessMove, Eval) {
+    pub fn best_move_iter_deep(&mut self) -> (chess::ChessMove, Eval, usize) {
         self.time_ref = Instant::now();
         self.reserve_time();
 
-        let mut prev = self.best_move(1);
+        let prev = self.best_move(1);
+        let mut prev = (prev.0, prev.1, 1);
 
         for depth in 2.. {
             let this = self.best_move(depth);
             if self.times_up() { break; }
 
-            prev = this;
+            prev = (this.0, this.1, depth);
         }
 
         prev
@@ -42,7 +43,7 @@ impl Engine {
         best
     }
 
-    /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
+    /// Perform an principal variation (fail-soft) negamax search and return the evaluation
     pub fn evaluate_search(
         &self,
         game: &Game,
@@ -79,8 +80,18 @@ impl Engine {
             self.trans_table.get(game.board().get_hash()).map_or(EVAL_MIN, |t| t.eval)
         });
 
-        for game in moves {
-            let (neg_eval, nt) = self.evaluate_search(&game, depth - 1, -beta, -alpha);
+        for (i, game) in moves.into_iter().enumerate() {
+            let (neg_eval, nt) = if i == 0 {
+                self.evaluate_search(&game, depth - 1, -beta, -alpha)
+            } else {
+                let (neg_eval, nt) = self.evaluate_search(&game, depth - 1, -alpha - 1, -alpha);
+                if alpha < -neg_eval && -neg_eval < beta && beta - alpha > 1 {
+                    // PVS: perform full search if non-pv nodes are better than expected
+                    self.evaluate_search(&game, depth - 1, -beta, -alpha)
+                } else {
+                    (neg_eval, nt)
+                }
+            };
             if self.times_up() { return (best, NodeType::None); }
 
             if nt != NodeType::None {

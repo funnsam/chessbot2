@@ -13,5 +13,5 @@ pub struct TransTableEntry {
 #[repr(u8)]
 #[derive(Default, Clone, Copy, bytemuck::NoUninit, PartialEq, Eq)]
 pub enum NodeType {
-    #[default] Exact, UpperBound, LowerBound, None
+    Exact, UpperBound, LowerBound, #[default] None
 }
