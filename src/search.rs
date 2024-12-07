@@ -67,7 +67,7 @@ impl Engine {
         }
 
         if depth == 0 {
-            return (evaluate_static(game.board()), NodeType::Exact);
+            return (self.quiescence_search(game, alpha, beta), NodeType::Exact);
         }
 
         let mut best = EVAL_MIN;
@@ -103,5 +103,29 @@ impl Engine {
         }
 
         (best, if best == alpha { NodeType::UpperBound } else { NodeType::Exact })
+    }
+
+    fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
+        let standing_pat = evaluate_static(game.board());
+        if standing_pat >= beta { return beta; }
+        alpha = alpha.max(standing_pat);
+        let mut best = standing_pat;
+
+        let mut moves = chess::MoveGen::new_legal(game.board());
+        moves.set_iterator_mask(*game.board().combined());
+        for m in moves {
+            let game = game.make_move(m);
+            let eval = -self.quiescence_search(&game, -beta, -alpha);
+
+            if eval > best {
+                best = eval;
+                alpha = alpha.max(eval);
+            }
+            if eval >= beta {
+                return best;
+            }
+        }
+
+        best
     }
 }
