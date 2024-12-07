@@ -7,4 +7,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bytemuck = { version = "1.20.0", features = ["derive"] }
 chess = "3.2.0"
+fxhash = "0.2.1"

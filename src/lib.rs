@@ -4,9 +4,12 @@ use std::time::*;
 mod eval;
 pub mod game;
 mod search;
+mod shared_table;
+mod trans_table;
 
 pub struct Engine {
     pub game: Game,
+    pub trans_table: trans_table::TransTable,
 
     pub time_ctrl: TimeControl,
     pub time_ref: Instant,
@@ -18,6 +21,7 @@ impl Engine {
         Self {
             game,
 
+            trans_table: trans_table::TransTable::new(32 * 1024 * 1024),
             time_ctrl: TimeControl::default(),
             time_ref: Instant::now(),
             time_usable: Duration::default(),
