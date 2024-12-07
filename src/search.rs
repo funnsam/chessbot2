@@ -26,7 +26,10 @@ impl Engine {
             .map(|m| (m, self.game.make_move(m)))
             .collect();
         moves.sort_unstable_by_key(|(_, game)| {
-            self.trans_table.get(game.board().get_hash()).map_or(EVAL_MIN, |t| t.eval)
+            self.trans_table.get(game.board().get_hash()).map_or_else(
+                || evaluate_static(game.board()),
+                |t| t.eval,
+            )
         });
 
         for (m, game) in moves {
@@ -77,7 +80,10 @@ impl Engine {
             .map(|m| game.make_move(m))
             .collect();
         moves.sort_unstable_by_key(|game| {
-            self.trans_table.get(game.board().get_hash()).map_or(EVAL_MIN, |t| t.eval)
+            self.trans_table.get(game.board().get_hash()).map_or_else(
+                || evaluate_static(game.board()),
+                |t| t.eval,
+            )
         });
 
         for game in moves {
