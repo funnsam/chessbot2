@@ -87,25 +87,25 @@ impl Engine {
         });
 
         for (i, game) in moves.into_iter().enumerate() {
-            let (neg_eval, nt) = if i == 0 {
-                self.evaluate_search(&game, depth - 1, -beta, -alpha)
+            let ((neg_eval, nt), this_depth) = if i == 0 {
+                (self.evaluate_search(&game, depth - 1, -beta, -alpha), depth - 1)
             } else {
-                let (neg_eval, nt) = self.evaluate_search(&game, depth - 1, -alpha - 1, -alpha);
+                let (neg_eval, nt) = self.evaluate_search(&game, depth.saturating_sub(2), -alpha - 1, -alpha);
 
                 if alpha < -neg_eval && -neg_eval < beta && beta - alpha > 1 {
                     if self.times_up() { return (best, NodeType::None); }
 
                     // PVS: perform full search if non-pv nodes are better than expected
-                    self.evaluate_search(&game, depth - 1, -beta, -alpha)
+                    (self.evaluate_search(&game, depth - 1, -beta, -alpha), depth - 1)
                 } else {
-                    (neg_eval, NodeType::None)
+                    ((neg_eval, NodeType::None), depth.saturating_sub(2))
                 }
             };
             if self.times_up() { return (best, NodeType::None); }
 
             if nt != NodeType::None {
                 self.trans_table.insert(game.board().get_hash(), TransTableEntry {
-                    depth: (depth - 1) as u8,
+                    depth: this_depth as u8,
                     eval: neg_eval,
                     node_type: nt,
                 });
