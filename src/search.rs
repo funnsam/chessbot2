@@ -81,8 +81,9 @@ impl Engine {
         game: &Game,
         depth: usize,
         beta: Eval,
+        is_pv: bool,
     ) -> (Eval, NodeType) {
-        self.evaluate_search(game, depth, beta - 1, beta, true)
+        self.evaluate_search(game, depth, beta - 1, beta, is_pv)
     }
 
     /// Perform a principal variation (fail-soft) negamax search and return the evaluation
@@ -92,7 +93,7 @@ impl Engine {
         depth: usize,
         mut alpha: Eval,
         beta: Eval,
-        in_zw: bool,
+        is_pv: bool,
     ) -> (Eval, NodeType) {
         if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
             if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
@@ -121,9 +122,9 @@ impl Engine {
         }
 
         let in_check = game.board().checkers().0 != 0;
-        if !in_check && depth > 3 && !in_zw {
+        if !in_check && depth > 3 && !is_pv {
             let game = game.make_null_move().unwrap();
-            let (neg_eval, nt) = self.zw_search(&game, depth - if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 }, 1 - beta);
+            let (neg_eval, nt) = self.zw_search(&game, depth - if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 }, 1 - beta, is_pv);
 
             if -neg_eval >= beta {
                 return (-neg_eval, NodeType::None);
@@ -142,20 +143,20 @@ impl Engine {
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let mut best = EVAL_MIN;
+        let mut alpha_improved = false;
         for (i, game) in moves.into_iter().enumerate() {
             let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
-            let pvs = |this_depth: usize| if i == 0 {
-                self.evaluate_search(&game, this_depth, -beta, -alpha, in_zw)
+            let pvs = |this_depth: usize| if depth < 3 || !alpha_improved {
+                self.evaluate_search(&game, this_depth, -beta, -alpha, is_pv)
             } else {
-                let (neg_eval, _nt) = self.zw_search(&game, this_depth, -alpha);
+                let (neg_eval, nt) = self.zw_search(&game, this_depth, -alpha, false);
 
-                if alpha < -neg_eval && !in_zw {
+                if alpha < -neg_eval && -neg_eval < beta {
                     // PVS: perform full search if non-pv nodes are better than expected
-                    // TODO: most moves researches?
-                    self.evaluate_search(&game, this_depth, -beta, -alpha, in_zw)
+                    self.evaluate_search(&game, this_depth, -beta, -alpha, true)
                 } else {
-                    (neg_eval, NodeType::None)
+                    (neg_eval, nt)
                 }
             };
 
@@ -164,7 +165,7 @@ impl Engine {
             if self.times_up() { return (best, NodeType::None); }
 
             if this_depth < depth - 1 && best < -neg_eval {
-                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha, in_zw);
+                let new = pvs(depth - 1);
 
                 if !self.times_up() {
                     this_depth = depth - 1;
@@ -184,6 +185,7 @@ impl Engine {
 
             if eval > best {
                 best = eval;
+                alpha_improved |= alpha < eval;
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
