@@ -18,7 +18,7 @@ impl Engine {
             prev = (this.0, this.1, depth);
             iter(self, prev.clone());
 
-            // if this.1 == EVAL_MAX { break; }
+            if this.1 == EVAL_MAX { break; }
         }
 
         prev
