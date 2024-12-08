@@ -17,6 +17,8 @@ impl Engine {
 
             prev = (this.0, this.1, depth);
             iter(self, prev.clone());
+
+            // if this.1 == EVAL_MAX { break; }
         }
 
         prev
@@ -146,10 +148,8 @@ impl Engine {
             let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential
-            if depth == 1 {
-                const MARGIN: Eval = 100;
-
-                if -evaluate_static(game.board()) + MARGIN < alpha {
+            if !in_check && depth <= 2 {
+                if -evaluate_static(game.board()) + (100 * depth as Eval * depth as Eval) < alpha {
                     continue;
                 }
             }
