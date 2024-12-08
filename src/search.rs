@@ -1,18 +1,21 @@
+use core::sync::atomic::Ordering;
 use crate::{*, eval::*, trans_table::*};
 
 impl Engine {
-    pub fn best_move_iter_deep(&mut self) -> (chess::ChessMove, Eval, usize) {
+    pub fn best_move_iter_deep<F: Fn(&Self, (chess::ChessMove, Eval, usize))>(&mut self, iter: F) -> (chess::ChessMove, Eval, usize) {
         self.time_ref = Instant::now();
+        self.nodes_searched.store(0, Ordering::Relaxed);
         self.reserve_time();
 
         let prev = self.best_move(1);
         let mut prev = (prev.0, prev.1, 1);
 
-        for depth in 2.. {
+        for depth in 2..255 {
             let this = self.best_move(depth);
             if self.times_up() { break; }
 
             prev = (this.0, this.1, depth);
+            iter(self, prev.clone());
         }
 
         prev
@@ -32,6 +35,7 @@ impl Engine {
                 |t| t.eval,
             )
         });
+        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let in_check = self.game.board().checkers().0 != 0;
 
@@ -109,6 +113,7 @@ impl Engine {
                 |t| t.eval,
             )
         });
+        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let in_check = game.board().checkers().0 != 0;
 
