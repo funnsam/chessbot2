@@ -8,16 +8,10 @@ pub const EVAL_MIN: Eval = -EVAL_MAX;
 pub fn evaluate_static(board: &Board) -> Eval {
     let perspective = if matches!(board.side_to_move(), Color::White) { 1 } else { -1 };
 
-    match board.status() {
-        BoardStatus::Ongoing => {
-            let white_eval = eval_single(board, Color::White);
-            let black_eval = eval_single(board, Color::Black);
+    let white_eval = eval_single(board, Color::White);
+    let black_eval = eval_single(board, Color::Black);
 
-            (white_eval - black_eval) * perspective
-        },
-        BoardStatus::Checkmate => EVAL_MIN,
-        BoardStatus::Stalemate => 0,
-    }
+    (white_eval - black_eval) * perspective
 }
 
 #[inline(always)]

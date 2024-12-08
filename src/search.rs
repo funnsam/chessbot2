@@ -9,8 +9,9 @@ impl Engine {
 
         let prev = self.best_move(1);
         let mut prev = (prev.0, prev.1, 1);
+        iter(self, prev.clone());
 
-        for depth in 2..255 {
+        for depth in 2..=255 {
             let this = self.best_move(depth);
             if self.times_up() { break; }
 
@@ -101,12 +102,18 @@ impl Engine {
             }
         }
 
-        if self.times_up() {
-            return (0, NodeType::None);
+        match game.board().status() {
+            chess::BoardStatus::Ongoing => {},
+            chess::BoardStatus::Checkmate => return (EVAL_MIN, NodeType::None),
+            chess::BoardStatus::Stalemate => return (0, NodeType::None),
         }
 
         if game.can_declare_draw() {
-            return (0, NodeType::Exact);
+            return (0, NodeType::None);
+        }
+
+        if self.times_up() {
+            return (0, NodeType::None);
         }
 
         if depth == 0 {
