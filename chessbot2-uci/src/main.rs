@@ -35,8 +35,12 @@ fn main() {
                     btime
                 };
 
-                let (mov, eval, depth) = engine.best_move_iter_deep();
-                println!("info score cp {eval} seldepth {depth} depth {depth}");
+                let (mov, ..) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
+                    println!(
+                        "info score cp {eval} seldepth {depth} depth {depth} nodes {} pv {best}",
+                        engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
+                    );
+                });
                 println!("bestmove {mov}");
             },
             None => println!("info string got unknown command {l}"),

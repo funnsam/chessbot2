@@ -14,6 +14,8 @@ pub struct Engine {
     pub time_ctrl: TimeControl,
     pub time_ref: Instant,
     pub time_usable: Duration,
+
+    pub nodes_searched: core::sync::atomic::AtomicUsize,
 }
 
 impl Engine {
@@ -25,6 +27,8 @@ impl Engine {
             time_ctrl: TimeControl::default(),
             time_ref: Instant::now(),
             time_usable: Duration::default(),
+
+            nodes_searched: core::sync::atomic::AtomicUsize::new(0),
         }
     }
 
