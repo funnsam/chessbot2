@@ -33,6 +33,15 @@ impl Game {
         Self { board, fifty_move_counter, hash_history }
     }
 
+    pub fn make_null_move(&self) -> Option<Self> {
+        let board = self.board.null_move()?;
+        let fifty_move_counter = self.fifty_move_counter + 1;
+        let mut hash_history = self.hash_history.clone();
+        hash_history.push(board.get_hash());
+
+        Some(Self { board, fifty_move_counter, hash_history })
+    }
+
     pub fn can_declare_draw(&self) -> bool {
         for h in self.hash_history.iter() {
             if self.hash_history.iter().filter(|i| h == *i).count() >= 3 {
