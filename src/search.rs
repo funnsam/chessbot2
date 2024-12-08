@@ -20,6 +20,7 @@ impl Engine {
 
     fn best_move(&self, depth: usize) -> (chess::ChessMove, Eval) {
         let mut alpha = EVAL_MIN;
+        let beta = EVAL_MAX;
         let mut best = (chess::ChessMove::default(), EVAL_MIN - 1);
 
         let mut moves: Vec<_> = chess::MoveGen::new_legal(self.game.board())
@@ -32,10 +33,33 @@ impl Engine {
             )
         });
 
-        for (m, game) in moves {
-            let (neg_eval, _nt) = self.evaluate_search(&game, depth - 1, EVAL_MIN, -alpha);
-            let eval = -neg_eval;
+        let in_check = self.game.board().checkers().0 != 0;
+
+        for (i, (m, game)) in moves.into_iter().enumerate() {
+            let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+
+            let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha);
+
             if depth != 1 && self.times_up() { break; }
+
+            if this_depth < depth - 1 && best.1 < -neg_eval {
+                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha);
+
+                if !self.times_up() {
+                    this_depth = depth - 1;
+                    (neg_eval, nt) = new;
+                }
+            }
+
+            if !self.times_up() && nt != NodeType::None {
+                self.trans_table.insert(game.board().get_hash(), TransTableEntry {
+                    depth: this_depth as u8,
+                    eval: neg_eval,
+                    node_type: nt,
+                });
+            }
+
+            let eval = -neg_eval;
 
             if eval > best.1 {
                 best = (m, eval);
@@ -86,13 +110,26 @@ impl Engine {
             )
         });
 
-        for game in moves {
-            let (neg_eval, nt) = self.evaluate_search(&game, depth - 1, -beta, -alpha);
+        let in_check = game.board().checkers().0 != 0;
+
+        for (i, game) in moves.into_iter().enumerate() {
+            let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+
+            let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha);
             if self.times_up() { return (best, NodeType::None); }
+
+            if this_depth < depth - 1 && best < -neg_eval {
+                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha);
+
+                if !self.times_up() {
+                    this_depth = depth - 1;
+                    (neg_eval, nt) = new;
+                }
+            }
 
             if nt != NodeType::None {
                 self.trans_table.insert(game.board().get_hash(), TransTableEntry {
-                    depth: (depth - 1) as u8,
+                    depth: this_depth as u8,
                     eval: neg_eval,
                     node_type: nt,
                 });

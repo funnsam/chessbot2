@@ -21,7 +21,7 @@ impl Engine {
         Self {
             game,
 
-            trans_table: trans_table::TransTable::new(32 * 1024 * 1024),
+            trans_table: trans_table::TransTable::new(32 * 1024 * 1024 / trans_table::TransTable::entry_size()),
             time_ctrl: TimeControl::default(),
             time_ref: Instant::now(),
             time_usable: Duration::default(),
