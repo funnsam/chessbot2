@@ -2,19 +2,21 @@ use core::cell::UnsafeCell;
 use bytemuck::*;
 use fxhash::hash64;
 
-pub struct SharedHashTable<T: Clone + Sized + NoUninit> {
+pub struct SharedHashTable<T: Clone + Sized + Send + Sync + NoUninit> {
     inner: Box<[UnsafeCell<TableEntry<T>>]>,
 }
 
 #[repr(packed)]
 #[derive(Default, Clone)]
-pub struct TableEntry<T: Clone + Sized + NoUninit> {
+pub struct TableEntry<T: Clone + Sized + Send + Sync + NoUninit> {
     key: u64,
     hash: u64,
     value: T,
 }
 
-impl<T: Default + Clone + Sized + NoUninit> SharedHashTable<T> {
+unsafe impl<T: Default + Clone + Sized + Send + Sync + NoUninit> Sync for SharedHashTable<T> {}
+
+impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
     pub const fn entry_size() -> usize { core::mem::size_of::<TableEntry<T>>() }
 
     pub fn new(size: usize) -> Self {
