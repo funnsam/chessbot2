@@ -145,6 +145,15 @@ impl Engine {
         for (i, game) in moves.into_iter().enumerate() {
             let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
+            // futility pruning: kill nodes with no potential
+            if depth == 1 {
+                const MARGIN: Eval = 100;
+
+                if -evaluate_static(game.board()) + MARGIN < alpha {
+                    continue;
+                }
+            }
+
             let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha, in_zw);
             if self.times_up() { return (best, NodeType::None); }
 
