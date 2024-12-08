@@ -1,3 +1,4 @@
+use core::str::FromStr;
 use std::sync::{atomic::*, Arc};
 use chess::*;
 use reqwest::*;
@@ -101,7 +102,7 @@ impl LichessClient {
                     tokio::spawn(async move { arc.play_game(id, game, color).await });
                 },
                 Some("gameFinish") => {
-                    self.active_games.fetch_add(1, Ordering::Relaxed);
+                    self.active_games.fetch_sub(1, Ordering::Relaxed);
                 },
                 Some("challengeCanceled" | "challengeDeclined") => {},
                 Some(typ) => {
@@ -127,15 +128,12 @@ impl LichessClient {
         ).await.unwrap().bytes_stream();
         let mut stream = NdJsonIter::new(stream);
 
-        let mut ignore_next = false;
-
         while let Some(event) = stream.next_json().await {
             match event["type"].as_str() {
                 Some("gameFull") => {
                     let state = &event["state"];
 
                     let moves = state["moves"].as_str().unwrap().split_whitespace();
-
                     // for m in moves {
                     //     engine.game.make_move(move_from_uci(m));
                     // }
@@ -149,17 +147,23 @@ impl LichessClient {
                             time_incr: inc,
                         };
 
-                        ignore_next = true;
                         let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
+                            info!(
+                                "depth {} nodes: {} best: {} eval: {}cp",
+                                depth,
+                                engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
+                                best,
+                                eval,
+                            );
                         });
                         self.send_move(&game_id, next).await;
                     }
                 },
                 Some("gameState") => {
-                    if !ignore_next {
-                        let m = event["moves"].as_str().unwrap().split_whitespace().last().unwrap();
-                        engine.game = engine.game.make_move(move_from_uci(m));
+                    let m = event["moves"].as_str().unwrap().split_whitespace().last().unwrap();
+                    engine.game = engine.game.make_move(move_from_uci(m));
 
+                    if engine.game.board().side_to_move() == color {
                         let time = event[color_prefix.to_string() + "time"].as_usize().unwrap();
                         let inc = event[color_prefix.to_string() + "inc"].as_usize().unwrap();
 
@@ -168,12 +172,16 @@ impl LichessClient {
                             time_incr: inc,
                         };
 
-                        ignore_next = true;
                         let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
+                            info!(
+                                "depth {} nodes: {} best: {} eval: {}cp",
+                                depth,
+                                engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
+                                best,
+                                eval,
+                            );
                         });
                         self.send_move(&game_id, next).await;
-                    } else {
-                        ignore_next = false;
                     }
                 },
                 Some(typ) => {
@@ -281,5 +289,8 @@ fn move_from_uci(m: &str) -> ChessMove {
     ChessMove::new(src, dst, piece)
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    let api_key = std::fs::read_to_string("api_key.txt").unwrap().trim().to_string();
+    Arc::new(LichessClient::new(api_key)).listen().await;
 }
