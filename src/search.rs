@@ -42,12 +42,12 @@ impl Engine {
         for (i, (m, game)) in moves.into_iter().enumerate() {
             let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
-            let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha);
+            let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha, false);
 
             if depth != 1 && self.times_up() { break; }
 
             if this_depth < depth - 1 && best.1 < -neg_eval {
-                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha);
+                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha, false);
 
                 if !self.times_up() {
                     this_depth = depth - 1;
@@ -74,6 +74,16 @@ impl Engine {
         best
     }
 
+    #[inline]
+    pub fn zw_search(
+        &self,
+        game: &Game,
+        depth: usize,
+        beta: Eval,
+    ) -> (Eval, NodeType) {
+        self.evaluate_search(game, depth, beta - 1, beta, true)
+    }
+
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
     pub fn evaluate_search(
         &self,
@@ -81,6 +91,7 @@ impl Engine {
         depth: usize,
         mut alpha: Eval,
         beta: Eval,
+        in_zw: bool,
     ) -> (Eval, NodeType) {
         if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
             if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
@@ -102,7 +113,15 @@ impl Engine {
             return (self.quiescence_search(game, alpha, beta), NodeType::Exact);
         }
 
-        let mut best = EVAL_MIN;
+        let in_check = game.board().checkers().0 != 0;
+        if !in_check && depth > 3 && !in_zw {
+            let game = game.make_null_move().unwrap();
+            let (neg_eval, nt) = self.zw_search(&game, depth - if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 }, 1 - beta);
+
+            if -neg_eval >= beta {
+                return (-neg_eval, NodeType::None);
+            }
+        }
 
         let mut moves: Vec<_> = chess::MoveGen::new_legal(game.board())
             .map(|m| game.make_move(m))
@@ -115,16 +134,15 @@ impl Engine {
         });
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
-        let in_check = game.board().checkers().0 != 0;
-
+        let mut best = EVAL_MIN;
         for (i, game) in moves.into_iter().enumerate() {
             let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
-            let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha);
+            let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha, in_zw);
             if self.times_up() { return (best, NodeType::None); }
 
             if this_depth < depth - 1 && best < -neg_eval {
-                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha);
+                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha, in_zw);
 
                 if !self.times_up() {
                     this_depth = depth - 1;
