@@ -43,17 +43,19 @@ impl Engine {
         let in_check = self.game.board().checkers().0 != 0;
 
         for (i, (m, game)) in moves.into_iter().enumerate() {
-            let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+            let will_check = game.board().checkers().0 != 0;
+            let ext = will_check as usize;
+            let mut this_depth = if depth < 3 || in_check || i < 5 || will_check { depth - 1 } else { depth / 2 } + ext;
 
             let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha, false);
 
             if depth != 1 && self.times_up() { break; }
 
-            if this_depth < depth - 1 && best.1 < -neg_eval {
-                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha, false);
+            if this_depth < depth - 1 + ext && best.1 < -neg_eval {
+                let new = self.evaluate_search(&game, depth - 1 + ext, -beta, -alpha, false);
 
                 if !self.times_up() {
-                    this_depth = depth - 1;
+                    this_depth = depth - 1 + ext;
                     (neg_eval, nt) = new;
                 }
             }
@@ -145,11 +147,13 @@ impl Engine {
 
         let mut best = EVAL_MIN;
         for (i, game) in moves.into_iter().enumerate() {
-            let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+            let will_check = game.board().checkers().0 != 0;
+            let ext = will_check as usize;
+            let mut this_depth = if depth < 3 || in_check || i < 5 || will_check { depth - 1 } else { depth / 2 } + ext;
 
             // futility pruning: kill nodes with no potential
-            if !in_check && depth <= 2 {
-                if -evaluate_static(game.board()) + (100 * depth as Eval * depth as Eval) < alpha {
+            if !in_check && this_depth <= 1 {
+                if -evaluate_static(game.board()) + (300 * this_depth as Eval + 100) < alpha {
                     continue;
                 }
             }
@@ -157,11 +161,11 @@ impl Engine {
             let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, -beta, -alpha, in_zw);
             if self.times_up() { return (best, NodeType::None); }
 
-            if this_depth < depth - 1 && best < -neg_eval {
-                let new = self.evaluate_search(&game, depth - 1, -beta, -alpha, in_zw);
+            if this_depth < depth - 1 + ext && best < -neg_eval {
+                let new = self.evaluate_search(&game, depth - 1 + ext, -beta, -alpha, in_zw);
 
                 if !self.times_up() {
-                    this_depth = depth - 1;
+                    this_depth = depth - 1 + ext;
                     (neg_eval, nt) = new;
                 }
             }
