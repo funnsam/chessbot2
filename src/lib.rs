@@ -56,10 +56,12 @@ impl Engine {
         self.can_time_out && self.time_ref.elapsed() > self.time_usable
     }
 
-    pub fn find_pv(&self, best: chess::ChessMove) -> Vec<chess::ChessMove> {
+    pub fn find_pv(&self, best: chess::ChessMove, max: usize) -> Vec<chess::ChessMove> {
         use chess::*;
 
-        let mut pv = vec![best];
+        let mut pv = Vec::with_capacity(max);
+        pv.push(best);
+
         let mut game = self.game.make_move(best);
         while let Some(tte) = self.trans_table.get(game.board().get_hash()) {
             if tte.next == ChessMove::default() { break }
@@ -67,10 +69,16 @@ impl Engine {
             pv.push(tte.next);
             game = game.make_move(tte.next);
 
-            if pv.len() >= 20 { break }
+            if pv.len() >= max { break }
         }
 
         pv
+    }
+
+    pub fn tt_size(&self) -> usize { self.trans_table.size() }
+
+    pub fn tt_used(&self) -> usize {
+        self.trans_table.filter_count(|e| e.node_type != trans_table::NodeType::None)
     }
 }
 

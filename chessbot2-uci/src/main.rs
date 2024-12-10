@@ -7,7 +7,6 @@ fn main() {
     let mut lines = std::io::stdin().lock().lines();
 
     let mut engine = Engine::new(Game::new(chess::Board::default()), 64 * 1024 * 1024);
-    let mut game_hash = engine.game.board().get_hash();
     let mut debug_mode = false;
 
     while let Some(Ok(l)) = lines.next() {
@@ -46,13 +45,18 @@ fn main() {
                     println!(
                         "info score cp {eval} seldepth {depth} depth {depth} nodes {} pv {}",
                         engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
-                        engine.find_pv(best).into_iter()
+                        engine.find_pv(best, if debug_mode { 100 } else { 20 }).into_iter()
                             .map(|m| m.to_string())
                             .collect::<Vec<_>>()
                             .join(" "),
                     );
                     target_depth.map_or(true, |td| td > depth)
                 });
+                if debug_mode {
+                    // NOTE: getting the amount of tt used can be expensive, so it is only counted
+                    // if in debug mode
+                    println!("info hashfull {}", 1000 * engine.tt_used() / engine.tt_size());
+                }
                 println!("bestmove {mov}");
             },
             None => println!("info string got unknown command {l}"),

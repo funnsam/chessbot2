@@ -150,7 +150,7 @@ impl LichessClient {
                         let time = state[color_prefix.to_string() + "time"].as_usize().unwrap();
                         let inc = state[color_prefix.to_string() + "inc"].as_usize().unwrap();
 
-                        engine.reserve_time(chessbot2::TimeControl {
+                        engine.time_control(chessbot2::TimeControl {
                             time_left: time,
                             time_incr: inc,
                         });
@@ -159,11 +159,12 @@ impl LichessClient {
                             info!(
                                 "depth: {depth}, searched {} nodes, PV {} ({eval}cp)",
                                 engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
-                                engine.find_pv(best).into_iter()
+                                engine.find_pv(best, 20).into_iter()
                                 .map(|m| m.to_string())
                                 .collect::<Vec<_>>()
                                 .join(" "),
                             );
+                            true
                         });
                         self.send_move(&game_id, next).await;
                     }
@@ -176,7 +177,7 @@ impl LichessClient {
                         let time = event[color_prefix.to_string() + "time"].as_usize().unwrap();
                         let inc = event[color_prefix.to_string() + "inc"].as_usize().unwrap();
 
-                        engine.reserve_time(chessbot2::TimeControl {
+                        engine.time_control(chessbot2::TimeControl {
                             time_left: time,
                             time_incr: inc,
                         });
@@ -185,11 +186,12 @@ impl LichessClient {
                             info!(
                                 "depth: {depth}, searched {} nodes, PV {} ({eval}cp)",
                                 engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
-                                engine.find_pv(best).into_iter()
+                                engine.find_pv(best, 20).into_iter()
                                 .map(|m| m.to_string())
                                 .collect::<Vec<_>>()
                                 .join(" "),
                             );
+                            true
                         });
                         self.send_move(&game_id, next).await;
                     }
