@@ -1,0 +1,53 @@
+position startpos
+go depth 8
+info score cp 123 seldepth 1 depth 1 nodes 20 pv g1f3
+info score cp 87 seldepth 2 depth 2 nodes 440 pv g1f3 b8c6
+info score cp 123 seldepth 3 depth 3 nodes 2103 pv b1c3 g8f6 g1f3
+info score cp 87 seldepth 4 depth 4 nodes 13156 pv b1c3 g8f6 g1f3 a7a5
+info score cp 95 seldepth 5 depth 5 nodes 43296 pv a2a4 g8f6 b1c3 b8c6 g2g3
+info score cp 104 seldepth 6 depth 6 nodes 181515 pv d2d4 d7d6 b1c3 g8f6 g1f3
+info score cp 112 seldepth 7 depth 7 nodes 597708 pv d2d4 d7d5 b1c3 c8e6 e2e4 g8f6 f1b5
+info score cp 104 seldepth 8 depth 8 nodes 1830309 pv d2d4 d7d5 b1c3 d8d7 g1f3 e8d8 f3e5 d7e6
+bestmove d2d4
+
+position startpos moves d2d4 d7d5
+go depth 8
+info score cp 123 seldepth 1 depth 1 nodes 27 pv b1c3
+info score cp 100 seldepth 2 depth 2 nodes 593 pv b1c3 d8d7
+info score cp 123 seldepth 3 depth 3 nodes 2262 pv b1c3 b8c6 g1f3
+info score cp 90 seldepth 4 depth 4 nodes 17232 pv b1c3 b8c6 c1e3 c8f5
+info score cp 105 seldepth 5 depth 5 nodes 67260 pv b1c3 c8e6 a2a3 b8c6 g1f3
+info score cp 91 seldepth 6 depth 6 nodes 476603 pv b1c3 g8f6 g1f3 b8c6 c1e3 c6a5
+info score cp 97 seldepth 7 depth 7 nodes 1263861 pv b1c3 b8c6 g1f3 f7f5 d1d3 c8e6 c1e3
+info score cp 97 seldepth 8 depth 8 nodes 3427558 pv b1c3 c8f5 e2e3 d8d7 g1f3 e8d8 f3e5 d7e6
+bestmove b1c3
+
+position startpos moves d2d4 d7d5 g2g3 c8f5
+go depth 8
+info score cp 124 seldepth 1 depth 1 nodes 28 pv g1f3
+info score cp 73 seldepth 2 depth 2 nodes 768 pv c1f4 e7e6
+info score cp 105 seldepth 3 depth 3 nodes 3317 pv f1g2 b8c6 g1f3
+info score cp 69 seldepth 4 depth 4 nodes 47990 pv g1f3 d8d6 f3e5 f5e4
+info score cp 71 seldepth 5 depth 5 nodes 80669 pv c1g5 f7f6 g5e3 e8f7 f1g2
+info score cp 70 seldepth 6 depth 6 nodes 401300 pv c1f4 g8f6 f1g2 f6e4 f2f3 e4d6
+info score cp 65 seldepth 7 depth 7 nodes 2598713 pv e2e3 b8c6 g1f3 a8c8 f1d3
+info score cp 95 seldepth 8 depth 8 nodes 6351212 pv f1g2 g8f6 g1f3 b8c6 h1f1 a8b8 c1e3 a7a5
+bestmove f1g2
+
+position startpos moves d2d4 d7d5 g2g3 c8f5 f1h3 f5h3
+go depth 8
+info score cp 78 seldepth 1 depth 1 nodes 24 pv g1h3
+info score cp 41 seldepth 2 depth 2 nodes 672 pv g1h3 b8c6
+info score cp 75 seldepth 3 depth 3 nodes 5165 pv g1h3 b8c6 h3g5
+info score cp 44 seldepth 4 depth 4 nodes 12108 pv g1h3 d8d7 h3g5 b8c6
+info score cp 78 seldepth 5 depth 5 nodes 127271 pv g1h3 b8c6 e1g1 e7e5 c1g5
+info score cp 47 seldepth 6 depth 6 nodes 188097 pv g1h3 d8d7 h3f4 e8d8 e1g1 b8c6
+info score cp 59 seldepth 7 depth 7 nodes 592819 pv g1h3 d8d7 h3g5 b8c6 c2c3 d7d6 e1g1
+info score cp 66 seldepth 8 depth 8 nodes 1823863 pv g1h3 g8f6 b1c3 b8c6 c1f4 d8c8 h3g5 f6g4
+bestmove g1h3
+
+position startpos moves d2d4 d7d5 g2g3 c8f5 f1h3 f5h3 g1h3 e7e6
+go depth 8
+info score cp 16384 seldepth 1 depth 1 nodes 29 pv c1d2
+info score cp 16384 seldepth 2 depth 2 nodes 58 pv c1d2
+bestmove c1d2

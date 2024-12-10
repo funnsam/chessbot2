@@ -2,7 +2,7 @@ use crate::{eval::Eval, shared_table::*};
 
 pub type TransTable = SharedHashTable<TransTableEntry>;
 
-#[repr(C, packed)]
+#[repr(packed)]
 #[derive(Default, Clone, Copy)]
 pub struct TransTableEntry {
     pub depth: u8,
