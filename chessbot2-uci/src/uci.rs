@@ -13,8 +13,8 @@ pub enum UciCommand {
         moves: Vec<ChessMove>,
     },
     Go {
-        wtime: TimeControl,
-        btime: TimeControl,
+        wtime: Option<TimeControl>,
+        btime: Option<TimeControl>,
     },
     Quit,
 }
@@ -80,30 +80,30 @@ pub fn parse_command<'a, T: Iterator<Item = &'a str>>(mut token: T) -> Option<Uc
             })
         },
         Some("go") => {
-            let mut wtime = u32::MAX as usize;
-            let mut btime = u32::MAX as usize;
-            let mut winc = 0;
-            let mut binc = 0;
+            let mut wtime = None;
+            let mut btime = None;
+            let mut winc = None;
+            let mut binc = None;
 
             while let Some(t) = token.next() {
                 match t {
-                    "wtime" => wtime = token.next()?.parse().ok()?,
-                    "btime" => btime = token.next()?.parse().ok()?,
-                    "winc" => winc = token.next()?.parse().ok()?,
-                    "binc" => binc = token.next()?.parse().ok()?,
+                    "wtime" => wtime = token.next().and_then(|t| t.parse().ok()),
+                    "btime" => btime = token.next().and_then(|t| t.parse().ok()),
+                    "winc" => winc = token.next().and_then(|t| t.parse().ok()),
+                    "binc" => binc = token.next().and_then(|t| t.parse().ok()),
                     _ => {},
                 }
             }
 
             Some(UciCommand::Go {
-                wtime: TimeControl {
-                    time_left: wtime,
-                    time_incr: winc,
-                },
-                btime: TimeControl {
-                    time_left: btime,
-                    time_incr: binc,
-                },
+                wtime: wtime.and_then(|time| winc.map(|inc| TimeControl {
+                    time_left: time,
+                    time_incr: inc,
+                })),
+                btime: btime.and_then(|time| binc.map(|inc| TimeControl {
+                    time_left: time,
+                    time_incr: inc,
+                })),
             })
         },
         Some("quit") => Some(UciCommand::Quit),

@@ -11,7 +11,6 @@ pub struct Engine {
     pub game: Game,
     pub trans_table: trans_table::TransTable,
 
-    pub time_ctrl: TimeControl,
     pub time_ref: Instant,
     pub time_usable: Duration,
 
@@ -19,12 +18,11 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new(game: Game) -> Self {
+    pub fn new(game: Game, hash_size_bytes: usize) -> Self {
         Self {
             game,
 
-            trans_table: trans_table::TransTable::new(32 * 1024 * 1024 / trans_table::TransTable::entry_size()),
-            time_ctrl: TimeControl::default(),
+            trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
             time_ref: Instant::now(),
             time_usable: Duration::default(),
 
@@ -32,11 +30,11 @@ impl Engine {
         }
     }
 
-    fn reserve_time(&mut self) {
+    pub fn reserve_time(&mut self, time_ctrl: TimeControl) {
         // https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V2-UCI/Chess-Coding-Adventure/src/Bot.cs#L64
 
-        let left = self.time_ctrl.time_left as u64;
-        let incr = self.time_ctrl.time_incr as u64;
+        let left = time_ctrl.time_left as u64;
+        let incr = time_ctrl.time_incr as u64;
 
         let mut think_time = left / 40;
 
@@ -46,6 +44,10 @@ impl Engine {
 
         let min_think = (left / 4).min(50);
         self.time_usable = Duration::from_millis(min_think.max(think_time));
+    }
+
+    pub fn infinite_time(&mut self) {
+        self.time_usable = Duration::MAX;
     }
 
     pub fn times_up(&self) -> bool {

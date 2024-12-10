@@ -5,7 +5,6 @@ impl Engine {
     pub fn best_move_iter_deep<F: Fn(&Self, (chess::ChessMove, Eval, usize))>(&mut self, iter: F) -> (chess::ChessMove, Eval, usize) {
         self.time_ref = Instant::now();
         self.nodes_searched.store(0, Ordering::Relaxed);
-        self.reserve_time();
 
         let prev = self.best_move(1);
         let mut prev = (prev.0, prev.1, 1);

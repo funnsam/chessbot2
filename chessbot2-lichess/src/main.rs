@@ -118,7 +118,7 @@ impl LichessClient {
     }
 
     async fn play_game(self: Arc<Self>, game_id: String, game: chessbot2::Game, color: Color) {
-        let mut engine = chessbot2::Engine::new(game);
+        let mut engine = chessbot2::Engine::new(game, 64 * 1024 * 1024);
 
         let color_prefix = if matches!(color, Color::White) { "w" } else { "b" };
 
@@ -142,10 +142,10 @@ impl LichessClient {
                         let time = state[color_prefix.to_string() + "time"].as_usize().unwrap();
                         let inc = state[color_prefix.to_string() + "inc"].as_usize().unwrap();
 
-                        engine.time_ctrl = chessbot2::TimeControl {
+                        engine.reserve_time(chessbot2::TimeControl {
                             time_left: time,
                             time_incr: inc,
-                        };
+                        });
 
                         let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
                             info!(

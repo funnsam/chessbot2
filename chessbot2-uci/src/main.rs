@@ -6,7 +6,7 @@ mod uci;
 fn main() {
     let mut lines = std::io::stdin().lock().lines();
 
-    let mut engine = Engine::new(Game::new(chess::Board::default()));
+    let mut engine = Engine::new(Game::new(chess::Board::default()), 64 * 1024 * 1024);
     let mut game_hash = engine.game.board().get_hash();
     let mut debug_mode = false;
 
@@ -29,11 +29,16 @@ fn main() {
                 }
             },
             Some(uci::UciCommand::Go { wtime, btime }) => {
-                engine.time_ctrl = if matches!(engine.game.board().side_to_move(), chess::Color::White) {
+                let tc = if matches!(engine.game.board().side_to_move(), chess::Color::White) {
                     wtime
                 } else {
                     btime
                 };
+                if let Some(tc) = tc {
+                    engine.reserve_time(tc);
+                } else {
+                    engine.infinite_time();
+                }
 
                 let (mov, ..) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
                     println!(
