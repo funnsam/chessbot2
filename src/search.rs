@@ -3,24 +3,24 @@ use crate::{*, eval::*, trans_table::*};
 use chess::{BoardStatus, ChessMove, MoveGen};
 
 impl Engine {
-    pub fn best_move_iter_deep<F: Fn(&Self, (ChessMove, Eval, usize))>(&mut self, iter: F) -> (ChessMove, Eval, usize) {
+    pub fn best_move_iter_deep<F: Fn(&Self, (ChessMove, Eval, usize)) -> bool>(&mut self, cont: F) -> (ChessMove, Eval, usize) {
         self.time_ref = Instant::now();
         self.nodes_searched.store(0, Ordering::Relaxed);
 
         self.can_time_out = false;
         let prev = self._evaluate_search(&self.game, 1, 0, EVAL_MIN, EVAL_MAX, false);
         let mut prev = (prev.0, prev.1, 1);
-        iter(self, prev.clone());
+        if !cont(self, prev.clone()) { return prev };
         self.can_time_out = true;
 
         for depth in 2..=255 {
             let this = self._evaluate_search(&self.game, depth, 0, EVAL_MIN, EVAL_MAX, false);
-            if self.times_up() { break; }
+            if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
-            iter(self, prev.clone());
+            if !cont(self, prev.clone()) { break };
 
-            if this.1 >= EVAL_MAX { break; }
+            if this.1 >= EVAL_MAX { break };
         }
 
         prev

@@ -58,25 +58,33 @@ impl LichessClient {
                     let variant = challenge["variant"]["key"].as_str().unwrap();
                     let time_ctrl = challenge["speed"].as_str().unwrap();
                     let is_rated = challenge["rated"].as_bool().unwrap();
-                    if EXCEPTION_USERS.contains(&user) || (
-                        variant == "standard"
-                        && !DISALLOWED_TIME_CONTROLS.contains(&time_ctrl)
-                        && (ACCEPT_RATED || !is_rated)
-                    ) {
-                        info!("`{}` challenged bot (id: `{}`)", user, id);
+                    let is_su = EXCEPTION_USERS.contains(&user);
 
+                    macro_rules! decline {
+                        ($reason:tt) => {
+                            if self.http(|c| c
+                                .post(format!("https://lichess.org/api/challenge/{id}/decline"))
+                                .body(concat!("reason=", stringify!($reason)))
+                                .build().unwrap()
+                            ).await.ok().and_then(|a| a.status().is_success().then(|| ())).is_none() {
+                                warn!("failed to decline challenge id {}", id);
+                            }
+                        };
+                    }
+
+                    info!("`{}` challenged bot (id: `{}`)", user, id);
+                    if !is_su && variant != "standard" {
+                        decline!(standard);
+                    } else if !is_su && DISALLOWED_TIME_CONTROLS.contains(&time_ctrl) {
+                        decline!(timeControl);
+                    } else if !is_su && !ACCEPT_RATED && is_rated {
+                        decline!(casual);
+                    } else {
                         if self.http(|c| c
                             .post(format!("https://lichess.org/api/challenge/{id}/accept"))
                             .build().unwrap()
                         ).await.ok().and_then(|a| a.status().is_success().then(|| ())).is_none() {
                             warn!("failed to accept challenge id {}", id);
-                        }
-                    } else {
-                        if self.http(|c| c
-                            .post(format!("https://lichess.org/api/challenge/{id}/decline"))
-                            .build().unwrap()
-                        ).await.ok().and_then(|a| a.status().is_success().then(|| ())).is_none() {
-                            warn!("failed to decline challenge id {}", id);
                         }
                     }
                 },
@@ -134,9 +142,9 @@ impl LichessClient {
                     let state = &event["state"];
 
                     let moves = state["moves"].as_str().unwrap().split_whitespace();
-                    // for m in moves {
-                    //     engine.game.make_move(move_from_uci(m));
-                    // }
+                    for m in moves.into_iter().skip(engine.game.history_len()) {
+                        engine.game.make_move(move_from_uci(m));
+                    }
 
                     if engine.game.board().side_to_move() == color {
                         let time = state[color_prefix.to_string() + "time"].as_usize().unwrap();
@@ -149,11 +157,12 @@ impl LichessClient {
 
                         let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
                             info!(
-                                "depth {} nodes: {} best: {} eval: {}cp",
-                                depth,
+                                "depth: {depth}, searched {} nodes, PV {} ({eval}cp)",
                                 engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
-                                best,
-                                eval,
+                                engine.find_pv(best).into_iter()
+                                .map(|m| m.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" "),
                             );
                         });
                         self.send_move(&game_id, next).await;
@@ -167,18 +176,19 @@ impl LichessClient {
                         let time = event[color_prefix.to_string() + "time"].as_usize().unwrap();
                         let inc = event[color_prefix.to_string() + "inc"].as_usize().unwrap();
 
-                        engine.time_ctrl = chessbot2::TimeControl {
+                        engine.reserve_time(chessbot2::TimeControl {
                             time_left: time,
                             time_incr: inc,
-                        };
+                        });
 
                         let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
                             info!(
-                                "depth {} nodes: {} best: {} eval: {}cp",
-                                depth,
+                                "depth: {depth}, searched {} nodes, PV {} ({eval}cp)",
                                 engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
-                                best,
-                                eval,
+                                engine.find_pv(best).into_iter()
+                                .map(|m| m.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" "),
                             );
                         });
                         self.send_move(&game_id, next).await;
@@ -205,7 +215,7 @@ impl LichessClient {
             .post(format!("https://lichess.org/api/bot/game/{game_id}/move/{m}"))
             .header("Authorization", format!("Bearer {}", self.api_token))
             .build().unwrap()
-            ).await.unwrap();
+        ).await.unwrap();
 
         if !resp.status().is_success() {
             let reason = json::parse(&resp.text().await.unwrap()).unwrap();

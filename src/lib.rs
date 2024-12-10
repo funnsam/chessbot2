@@ -32,7 +32,7 @@ impl Engine {
         }
     }
 
-    pub fn reserve_time(&mut self, time_ctrl: TimeControl) {
+    pub fn time_control(&mut self, time_ctrl: TimeControl) {
         // https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V2-UCI/Chess-Coding-Adventure/src/Bot.cs#L64
 
         let left = time_ctrl.time_left as u64;
@@ -48,8 +48,8 @@ impl Engine {
         self.time_usable = Duration::from_millis(min_think.max(think_time));
     }
 
-    pub fn infinite_time(&mut self) {
-        self.time_usable = Duration::MAX;
+    pub fn allow_for(&mut self, time: Duration) {
+        self.time_usable = time;
     }
 
     pub fn times_up(&self) -> bool {

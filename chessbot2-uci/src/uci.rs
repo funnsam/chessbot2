@@ -1,4 +1,5 @@
 use core::str::FromStr;
+use std::time::Duration;
 use chess::*;
 use chessbot2::TimeControl;
 
@@ -13,6 +14,8 @@ pub enum UciCommand {
         moves: Vec<ChessMove>,
     },
     Go {
+        depth: Option<usize>,
+        movetime: Option<Duration>,
         wtime: Option<TimeControl>,
         btime: Option<TimeControl>,
     },
@@ -80,6 +83,8 @@ pub fn parse_command<'a, T: Iterator<Item = &'a str>>(mut token: T) -> Option<Uc
             })
         },
         Some("go") => {
+            let mut depth = None;
+            let mut movetime = None;
             let mut wtime = None;
             let mut btime = None;
             let mut winc = None;
@@ -87,6 +92,8 @@ pub fn parse_command<'a, T: Iterator<Item = &'a str>>(mut token: T) -> Option<Uc
 
             while let Some(t) = token.next() {
                 match t {
+                    "depth" => depth = token.next().and_then(|t| t.parse().ok()),
+                    "movetime" => movetime = token.next().and_then(|t| Some(Duration::from_millis(t.parse().ok()?))),
                     "wtime" => wtime = token.next().and_then(|t| t.parse().ok()),
                     "btime" => btime = token.next().and_then(|t| t.parse().ok()),
                     "winc" => winc = token.next().and_then(|t| t.parse().ok()),
@@ -96,6 +103,8 @@ pub fn parse_command<'a, T: Iterator<Item = &'a str>>(mut token: T) -> Option<Uc
             }
 
             Some(UciCommand::Go {
+                depth,
+                movetime,
                 wtime: wtime.and_then(|time| winc.map(|inc| TimeControl {
                     time_left: time,
                     time_incr: inc,

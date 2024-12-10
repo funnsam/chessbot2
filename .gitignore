@@ -4,3 +4,4 @@ target
 /config.json
 /engines
 api_key.txt
+/mate-epd

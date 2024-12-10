@@ -51,4 +51,6 @@ impl Game {
 
         self.fifty_move_counter >= 100
     }
+
+    pub fn history_len(&self) -> usize { self.hash_history.len() }
 }

@@ -28,16 +28,18 @@ fn main() {
                     engine.game = engine.game.make_move(m);
                 }
             },
-            Some(uci::UciCommand::Go { wtime, btime }) => {
+            Some(uci::UciCommand::Go { depth: target_depth, movetime, wtime, btime }) => {
                 let tc = if matches!(engine.game.board().side_to_move(), chess::Color::White) {
                     wtime
                 } else {
                     btime
                 };
-                if let Some(tc) = tc {
-                    engine.reserve_time(tc);
+                if let Some(mt) = movetime {
+                    engine.allow_for(mt);
+                } else if let Some(tc) = tc {
+                    engine.time_control(tc);
                 } else {
-                    engine.infinite_time();
+                    engine.allow_for(std::time::Duration::MAX);
                 }
 
                 let (mov, ..) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
@@ -49,6 +51,7 @@ fn main() {
                             .collect::<Vec<_>>()
                             .join(" "),
                     );
+                    target_depth.map_or(true, |td| td > depth)
                 });
                 println!("bestmove {mov}");
             },
