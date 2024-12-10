@@ -13,6 +13,7 @@ pub struct Engine {
 
     pub time_ref: Instant,
     pub time_usable: Duration,
+    can_time_out: bool,
 
     pub nodes_searched: core::sync::atomic::AtomicUsize,
 }
@@ -21,10 +22,11 @@ impl Engine {
     pub fn new(game: Game, hash_size_bytes: usize) -> Self {
         Self {
             game,
-
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
+
             time_ref: Instant::now(),
             time_usable: Duration::default(),
+            can_time_out: true,
 
             nodes_searched: core::sync::atomic::AtomicUsize::new(0),
         }
@@ -51,7 +53,24 @@ impl Engine {
     }
 
     pub fn times_up(&self) -> bool {
-        self.time_ref.elapsed() > self.time_usable
+        self.can_time_out && self.time_ref.elapsed() > self.time_usable
+    }
+
+    pub fn find_pv(&self, best: chess::ChessMove) -> Vec<chess::ChessMove> {
+        use chess::*;
+
+        let mut pv = vec![best];
+        let mut game = self.game.make_move(best);
+        while let Some(tte) = self.trans_table.get(game.board().get_hash()) {
+            if tte.next == ChessMove::default() { break }
+
+            pv.push(tte.next);
+            game = game.make_move(tte.next);
+
+            if pv.len() >= 20 { break }
+        }
+
+        pv
     }
 }
 

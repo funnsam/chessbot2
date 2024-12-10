@@ -42,8 +42,12 @@ fn main() {
 
                 let (mov, ..) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
                     println!(
-                        "info score cp {eval} seldepth {depth} depth {depth} nodes {} pv {best}",
+                        "info score cp {eval} seldepth {depth} depth {depth} nodes {} pv {}",
                         engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
+                        engine.find_pv(best).into_iter()
+                            .map(|m| m.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" "),
                     );
                 });
                 println!("bestmove {mov}");
