@@ -27,7 +27,7 @@ impl Engine {
     }
 
     #[inline]
-    pub fn zw_search(
+    fn zw_search(
         &self,
         game: &Game,
         depth: usize,
@@ -39,7 +39,7 @@ impl Engine {
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
     #[inline]
-    pub fn evaluate_search(
+    fn evaluate_search(
         &self,
         game: &Game,
         depth: usize,
@@ -50,7 +50,7 @@ impl Engine {
     ) -> (Eval, NodeType) {
         let (next, eval, nt) = self._evaluate_search(game, depth, ply, alpha, beta, in_zw);
 
-        if nt != NodeType::None {
+        if nt != NodeType::None && !self.times_up() {
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
                 depth: depth as u8,
                 eval,
@@ -120,11 +120,18 @@ impl Engine {
 
         let mut best = (ChessMove::default(), EVAL_MIN - 1);
         for (i, (m, game)) in moves.into_iter().enumerate() {
-            let mut this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+            let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
-                if -evaluate_static(game.board()) + (100 * depth as Eval * depth as Eval) < alpha {
+                let eval = -evaluate_static(game.board());
+                let margin = 100 * depth as Eval * depth as Eval;
+
+                if eval + margin < alpha {
+                    if best.0 == ChessMove::default() {
+                        best = (m, eval - margin);
+                    }
+
                     continue;
                 }
             }
@@ -142,7 +149,7 @@ impl Engine {
 
             let eval = -neg_eval;
 
-            if eval > best.1 {
+            if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
                 alpha = alpha.max(eval);
             }

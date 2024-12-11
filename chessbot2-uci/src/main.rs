@@ -1,12 +1,16 @@
+#![feature(str_split_whitespace_remainder)]
+
 use std::io::BufRead;
 use chessbot2::*;
 
 mod uci;
 
+const DEFAULT_HASH_SIZE_MB: usize = 64;
+
 fn main() {
     let mut lines = std::io::stdin().lock().lines();
 
-    let mut engine = Engine::new(Game::new(chess::Board::default()), 64 * 1024 * 1024);
+    let mut engine = Engine::new(Game::new(chess::Board::default()), DEFAULT_HASH_SIZE_MB * 1024 * 1024);
     let mut debug_mode = false;
 
     while let Some(Ok(l)) = lines.next() {
@@ -15,7 +19,12 @@ fn main() {
             Some(uci::UciCommand::Uci) => {
                 println!("id name funn's bot");
                 println!("id author funnsam");
+                println!("option name Hash type spin default {DEFAULT_HASH_SIZE_MB} min 0 max 16384");
                 println!("uciok");
+            },
+            Some(uci::UciCommand::SetOption(name, value)) => match name.to_ascii_lowercase().as_str() {
+                "hash" => engine.resize_hash(value.unwrap().parse().unwrap()),
+                _ => println!("info string got invalid setoption option"),
             },
             Some(uci::UciCommand::Debug(d)) => debug_mode = d,
             Some(uci::UciCommand::IsReady) => println!("readyok"),

@@ -32,6 +32,10 @@ impl Engine {
         }
     }
 
+    pub fn resize_hash(&mut self, hash_size_bytes: usize) {
+        self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
+    }
+
     pub fn time_control(&mut self, time_ctrl: TimeControl) {
         // https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V2-UCI/Chess-Coding-Adventure/src/Bot.cs#L64
 

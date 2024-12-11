@@ -4,7 +4,7 @@ use chess::*;
 use chessbot2::TimeControl;
 
 #[derive(Debug)]
-pub enum UciCommand {
+pub enum UciCommand<'a> {
     Uci,
     Debug(bool),
     IsReady,
@@ -19,6 +19,7 @@ pub enum UciCommand {
         wtime: Option<TimeControl>,
         btime: Option<TimeControl>,
     },
+    SetOption(&'a str, Option<&'a str>),
     Quit,
 }
 
@@ -44,7 +45,7 @@ fn move_from_uci(m: &str) -> ChessMove {
     ChessMove::new(src, dst, piece)
 }
 
-pub fn parse_command<'a, T: Iterator<Item = &'a str>>(mut token: T) -> Option<UciCommand> {
+pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<UciCommand<'a>> {
     match token.next() {
         Some("uci") => Some(UciCommand::Uci),
         Some("debug") => Some(UciCommand::Debug(token.next()? == "on")),
@@ -114,6 +115,13 @@ pub fn parse_command<'a, T: Iterator<Item = &'a str>>(mut token: T) -> Option<Uc
                     time_incr: inc,
                 })),
             })
+        },
+        Some("setoption") => {
+            token.next();
+            let name = token.next()?;
+            token.next();
+            let value = token.remainder();
+            Some(UciCommand::SetOption(name, value))
         },
         Some("quit") => Some(UciCommand::Quit),
         Some(_) => parse_command(token),
