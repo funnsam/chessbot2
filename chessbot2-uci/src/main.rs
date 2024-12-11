@@ -52,8 +52,7 @@ fn main() {
 
                 let (mov, ..) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
                     println!(
-                        "info score {:#} seldepth {depth} depth {depth} nodes {} pv {}",
-                        chessbot2::DetailedEval::from_eval(eval),
+                        "info score {eval:#} seldepth {depth} depth {depth} nodes {} pv {}",
                         engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
                         engine.find_pv(best, if debug_mode { 100 } else { 20 }).into_iter()
                             .map(|m| m.to_string())

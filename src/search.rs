@@ -8,17 +8,17 @@ impl Engine {
         self.nodes_searched.store(0, Ordering::Relaxed);
 
         self.can_time_out = false;
-        let prev = self._evaluate_search(&self.game, 1, 0, EVAL_MIN, EVAL_MAX, false);
+        let prev = self._evaluate_search(&self.game, 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
-        if !cont(self, prev.clone()) || prev.1 >= EVAL_M0 { return prev };
+        if !cont(self, prev.clone()) || prev.1 >= Eval::POS_MATE { return prev };
         self.can_time_out = true;
 
         for depth in 2..=255 {
-            let this = self._evaluate_search(&self.game, depth, 0, EVAL_MIN, EVAL_MAX, false);
+            let this = self._evaluate_search(&self.game, depth, 0, Eval::MIN, Eval::MAX, false);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
-            if !cont(self, prev.clone()) || prev.1 >= EVAL_M0 { break };
+            if !cont(self, prev.clone()) || prev.1 >= Eval::POS_MATE { break };
         }
 
         prev
@@ -32,7 +32,7 @@ impl Engine {
         ply: usize,
         beta: Eval,
     ) -> (Eval, NodeType) {
-        self.evaluate_search(game, depth, ply, beta - 1, beta, true)
+        self.evaluate_search(game, depth, ply, Eval(beta.0 - 1), beta, true)
     }
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
@@ -48,7 +48,7 @@ impl Engine {
     ) -> (Eval, NodeType) {
         let (next, eval, nt) = self._evaluate_search(game, depth, ply, alpha, beta, in_zw);
 
-        if nt != NodeType::None && eval.abs() > EVAL_M0 && !self.times_up() {
+        if nt != NodeType::None && eval.0.abs() > Eval::M0.0 && !self.times_up() {
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
                 depth: depth as u8,
                 eval,
@@ -70,25 +70,26 @@ impl Engine {
         in_zw: bool,
     ) -> (ChessMove, Eval, NodeType) {
         if game.can_declare_draw() {
-            return (ChessMove::default(), 0, NodeType::None);
+            return (ChessMove::default(), Eval(0), NodeType::None);
         }
 
         if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
+            let eval = trans.eval;
             if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
-                || (trans.node_type == NodeType::LowerBound && trans.eval >= beta)
-                || (trans.node_type == NodeType::UpperBound && trans.eval < alpha)) {
-                return (trans.next, incr_mate(trans.eval), NodeType::None);
+                || (trans.node_type == NodeType::LowerBound && eval >= beta)
+                || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
+                return (trans.next, eval.incr_mate(), NodeType::None);
             }
         }
 
         match game.board().status() {
             BoardStatus::Ongoing => {},
-            BoardStatus::Checkmate => return (ChessMove::default(), -EVAL_M0, NodeType::None),
-            BoardStatus::Stalemate => return (ChessMove::default(), 0, NodeType::None),
+            BoardStatus::Checkmate => return (ChessMove::default(), -Eval::M0, NodeType::None),
+            BoardStatus::Stalemate => return (ChessMove::default(), Eval(0), NodeType::None),
         }
 
         if self.times_up() {
-            return (ChessMove::default(), 0, NodeType::None);
+            return (ChessMove::default(), Eval(0), NodeType::None);
         }
 
         if depth == 0 {
@@ -98,10 +99,10 @@ impl Engine {
         let in_check = game.board().checkers().0 != 0;
         if ply != 0 && !in_check && depth > 3 && !in_zw {
             let game = game.make_null_move().unwrap();
-            let (neg_eval, _) = self.zw_search(&game, depth - if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 }, ply + 1, 1 - beta);
+            let (neg_eval, _) = self.zw_search(&game, depth - if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 }, ply + 1, Eval(1 - beta.0));
 
             if -neg_eval >= beta {
-                return (ChessMove::default(), incr_mate(-neg_eval), NodeType::None);
+                return (ChessMove::default(), (-neg_eval).incr_mate(), NodeType::None);
             }
         }
 
@@ -116,18 +117,18 @@ impl Engine {
         });
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
-        let mut best = (ChessMove::default(), EVAL_MIN);
+        let mut best = (ChessMove::default(), Eval::MIN);
         for (i, (m, game)) in moves.into_iter().enumerate() {
             let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
                 let eval = -evaluate_static(game.board());
-                let margin = 100 * depth as Eval * depth as Eval;
+                let margin = 100 * depth as i16 * depth as i16  ;
 
-                if eval + margin < alpha {
+                if eval.0 + margin < alpha.0 {
                     if best.0 == ChessMove::default() {
-                        best = (m, eval - margin);
+                        best = (m, Eval(eval.0 - margin));
                     }
 
                     continue;
@@ -135,7 +136,7 @@ impl Engine {
             }
 
             let (mut neg_eval, mut nt) = self.evaluate_search(&game, this_depth, ply + 1, -beta, -alpha, in_zw);
-            if self.times_up() { return (best.0, incr_mate(best.1), NodeType::None); }
+            if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
             if this_depth < depth - 1 && best.1 < -neg_eval {
                 let new = self.evaluate_search(&game, depth - 1, ply + 1, -beta, -alpha, in_zw);
@@ -152,11 +153,11 @@ impl Engine {
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                return (best.0, incr_mate(best.1), NodeType::LowerBound);
+                return (best.0, best.1.incr_mate(), NodeType::LowerBound);
             }
         }
 
-        (best.0, incr_mate(best.1), if best.1 == alpha { NodeType::UpperBound } else { NodeType::Exact })
+        (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::UpperBound } else { NodeType::Exact })
     }
 
     fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {

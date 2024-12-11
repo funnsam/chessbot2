@@ -4,54 +4,58 @@ use chess::*;
 
 /// Evaluation score in centipawns. +ve is side to move better and -ve is worse
 /// ```text
-///                          ┌┬┬─ mate in |n|
-/// 10_000…b              01_000…b
-/// -32767                16384
-/// #-0                   #0
+///    ┌┬┬─ mate in n              ┌┬┬─ mate in !n
+/// 10_000…b                    01_111…b
+/// -32767                      32767
+/// #-0                         #0
 /// ←──────|──────|──────|──────→
 ///      min cp   0   max cp
 ///      -16383        16383
 /// ```
-pub type Eval = i16;
-pub const EVAL_M0: Eval = EVAL_MAX / 2;
-pub const EVAL_MAX: Eval = Eval::MAX;
-pub const EVAL_MIN: Eval = -EVAL_MAX;
 
-pub fn incr_mate(eval: Eval) -> Eval {
-    if eval.abs() >= EVAL_M0 {
-        eval + 1
-    } else {
-        eval
-    }
-}
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Eval(pub i16);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum DetailedEval {
-    Cp(Eval),
-    Mate(Eval),
-}
+impl Eval {
+    pub const MAX: Self = Self(i16::MAX);
+    pub const MIN: Self = Self(-Self::MAX.0);
+    pub const M0: Self = Self(Self::MAX.0);
+    pub const POS_MATE: Self = Self(0x4000);
 
-impl DetailedEval {
-    pub fn from_eval(eval: Eval) -> Self {
-        if eval.abs() >= EVAL_M0 {
-            Self::Mate((eval & (EVAL_M0 - 1)) * eval.signum())
-        } else {
-            Self::Cp(eval)
+    pub fn incr_mate(self) -> Self {
+        match self.0 as u16 >> 14 {
+            1 => Self(self.0 - 1),
+            2 => Self(self.0 + 1),
+            _ => self,
         }
     }
 }
 
-impl core::fmt::Display for DetailedEval {
+impl core::ops::Neg for Eval {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        if matches!(self.0 as u16 >> 14, 1 | 2) {
+            Self(-self.0)
+        } else {
+            Self(!self.0)
+        }
+    }
+}
+
+impl core::fmt::Display for Eval {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if f.alternate() {
-            match self {
-                Self::Cp(eval) => write!(f, "cp {eval}"),
-                Self::Mate(eval) => write!(f, "mate {eval}"),
+            match self.0 as u16 >> 14 {
+                1 => write!(f, "mate {}", !self.0 & 0x3fff),
+                2 => write!(f, "mate -{}", self.0 & 0x3fff),
+                _ => write!(f, "cp {}", self.0),
             }
         } else {
-            match self {
-                Self::Cp(eval) => write!(f, "{eval}cp"),
-                Self::Mate(eval) => write!(f, "#{eval}"),
+            match self.0 as u16 >> 14 {
+                1 => write!(f, "#{}", ((!self.0 & 0x3fff) + 1) / 2),
+                2 => write!(f, "#-{}", ((self.0 & 0x3fff) + 1) / 2),
+                _ => write!(f, "{}cp", self.0),
             }
         }
     }
@@ -80,18 +84,18 @@ pub fn evaluate_static(board: &Board) -> Eval {
     let mg_phase = phase.min(24);
     let eg_phase = 24 - mg_phase;
 
-    ((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / 24) as Eval
+    Eval(((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / 24) as i16)
 }
 
-const PIECE_VALUE_MID: [Eval; 6] = [82, 337, 365, 477, 1025,  0];
-const PIECE_VALUE_END: [Eval; 6] = [94, 281, 297, 512,  936,  0];
+const PIECE_VALUE_MID: [i16; 6] = [82, 337, 365, 477, 1025,  0];
+const PIECE_VALUE_END: [i16; 6] = [94, 281, 297, 512,  936,  0];
 const PIECE_PHASE: [u8; 6] = [0, 1, 1, 2, 4, 0];
 
 // a1 ----> h1
 // |
 // v
 // a8
-const PIECE_SQUARE_TABLE_MID: [Eval; 64 * 6] = [
+const PIECE_SQUARE_TABLE_MID: [i16; 64 * 6] = [
     // Pawn
       0,   0,   0,   0,   0,   0,  0,   0,
     -35,  -1, -20, -23, -15,  24, 38, -22,
@@ -148,7 +152,7 @@ const PIECE_SQUARE_TABLE_MID: [Eval; 64 * 6] = [
     -65,  23,  16, -15, -56, -34,   2,  13,
 ];
 
-const PIECE_SQUARE_TABLE_END: [Eval; 64 * 6] = [
+const PIECE_SQUARE_TABLE_END: [i16; 64 * 6] = [
     // Pawn
       0,   0,   0,   0,   0,   0,   0,   0,
      13,   8,   8,  10,  13,   0,   2,  -7,
