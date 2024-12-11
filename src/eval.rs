@@ -3,9 +3,59 @@
 use chess::*;
 
 /// Evaluation score in centipawns. +ve is side to move better and -ve is worse
+/// ```text
+///                          ┌┬┬─ mate in |n|
+/// 10_000…b              01_000…b
+/// -32767                16384
+/// #-0                   #0
+/// ←──────|──────|──────|──────→
+///      min cp   0   max cp
+///      -16383        16383
+/// ```
 pub type Eval = i16;
-pub const EVAL_MAX: Eval = i16::MAX / 2;
+pub const EVAL_M0: Eval = EVAL_MAX / 2;
+pub const EVAL_MAX: Eval = Eval::MAX;
 pub const EVAL_MIN: Eval = -EVAL_MAX;
+
+pub fn incr_mate(eval: Eval) -> Eval {
+    if eval.abs() >= EVAL_M0 {
+        eval + 1
+    } else {
+        eval
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DetailedEval {
+    Cp(Eval),
+    Mate(Eval),
+}
+
+impl DetailedEval {
+    pub fn from_eval(eval: Eval) -> Self {
+        if eval.abs() >= EVAL_M0 {
+            Self::Mate((eval & (EVAL_M0 - 1)) * eval.signum())
+        } else {
+            Self::Cp(eval)
+        }
+    }
+}
+
+impl core::fmt::Display for DetailedEval {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if f.alternate() {
+            match self {
+                Self::Cp(eval) => write!(f, "cp {eval}"),
+                Self::Mate(eval) => write!(f, "mate {eval}"),
+            }
+        } else {
+            match self {
+                Self::Cp(eval) => write!(f, "{eval}cp"),
+                Self::Mate(eval) => write!(f, "#{eval}"),
+            }
+        }
+    }
+}
 
 pub fn evaluate_static(board: &Board) -> Eval {
     let mut mid_game = [0, 0];

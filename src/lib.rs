@@ -1,3 +1,4 @@
+pub use eval::{DetailedEval, Eval, EVAL_M0, EVAL_MAX, EVAL_MIN};
 pub use game::Game;
 use std::time::*;
 
