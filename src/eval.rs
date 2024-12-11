@@ -36,9 +36,9 @@ impl core::ops::Neg for Eval {
 
     fn neg(self) -> Self::Output {
         if matches!(self.0 as u16 >> 14, 1 | 2) {
-            Self(-self.0)
-        } else {
             Self(!self.0)
+        } else {
+            Self(-self.0)
         }
     }
 }
@@ -59,6 +59,20 @@ impl core::fmt::Display for Eval {
             }
         }
     }
+}
+
+#[test]
+#[cfg(test)]
+fn test_eval() {
+    let m0 = Eval::M0;
+    let m1 = m0.incr_mate();
+    let m_0 = -m0;
+    let m_1 = m_0.incr_mate();
+
+    assert_eq!(m0.0, 0x7fff);
+    assert_eq!(m1.0, 0x7ffe);
+    assert_eq!(m_0.0 as u16, 0x8000);
+    assert_eq!(m_1.0 as u16, 0x8001);
 }
 
 pub fn evaluate_static(board: &Board) -> Eval {
