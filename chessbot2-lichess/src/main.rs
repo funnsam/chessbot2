@@ -128,7 +128,7 @@ impl LichessClient {
     async fn play_game(self: Arc<Self>, game_id: String, game: chessbot2::Game, color: Color) {
         let mut engine = chessbot2::Engine::new(game, 64 * 1024 * 1024);
 
-        let color_prefix = if matches!(color, Color::White) { "w" } else { "b" };
+        let color_prefix = if matches!(color, Color::White) { 'w' } else { 'b' };
 
         let stream = self.http(|c| c
             .get(format!("https://lichess.org/api/bot/game/stream/{game_id}"))
@@ -141,59 +141,27 @@ impl LichessClient {
                 Some("gameFull") => {
                     let state = &event["state"];
 
-                    let moves = state["moves"].as_str().unwrap().split_whitespace();
-                    for m in moves.into_iter().skip(engine.game.history_len()) {
-                        engine.game.make_move(move_from_uci(m));
+                    // let moves = state["moves"].as_str().unwrap().split_whitespace();
+                    // for m in moves.into_iter().skip(engine.game.history_len()) {
+                    //     engine.game.make_move(move_from_uci(m));
+                    // }
+
+                    if let Some(m) = event["moves"].as_str().and_then(|m| m.split_whitespace().last()) {
+                        engine.game = engine.game.make_move(move_from_uci(m));
                     }
 
                     if engine.game.board().side_to_move() == color {
-                        let time = state[color_prefix.to_string() + "time"].as_usize().unwrap();
-                        let inc = state[color_prefix.to_string() + "inc"].as_usize().unwrap();
-
-                        engine.time_control(chessbot2::TimeControl {
-                            time_left: time,
-                            time_incr: inc,
-                        });
-
-                        let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
-                            info!(
-                                "depth: {depth}, searched {} nodes, PV {} ({eval}cp)",
-                                engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
-                                engine.find_pv(best, 20).into_iter()
-                                .map(|m| m.to_string())
-                                .collect::<Vec<_>>()
-                                .join(" "),
-                            );
-                            true
-                        });
-                        self.send_move(&game_id, next).await;
+                        self.play(&game_id, color_prefix, &state, &mut engine).await;
                     }
                 },
                 Some("gameState") => {
-                    let m = event["moves"].as_str().unwrap().split_whitespace().last().unwrap();
-                    engine.game = engine.game.make_move(move_from_uci(m));
+                    if let Some(m) = event["moves"].as_str().and_then(|m| m.split_whitespace().last()) {
+                        engine.game = engine.game.make_move(move_from_uci(m));
+                    }
+
 
                     if engine.game.board().side_to_move() == color {
-                        let time = event[color_prefix.to_string() + "time"].as_usize().unwrap();
-                        let inc = event[color_prefix.to_string() + "inc"].as_usize().unwrap();
-
-                        engine.time_control(chessbot2::TimeControl {
-                            time_left: time,
-                            time_incr: inc,
-                        });
-
-                        let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
-                            info!(
-                                "depth: {depth}, searched {} nodes, PV {} ({eval}cp)",
-                                engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
-                                engine.find_pv(best, 20).into_iter()
-                                .map(|m| m.to_string())
-                                .collect::<Vec<_>>()
-                                .join(" "),
-                            );
-                            true
-                        });
-                        self.send_move(&game_id, next).await;
+                        self.play(&game_id, color_prefix, &event, &mut engine).await;
                     }
                 },
                 Some(typ) => {
@@ -208,6 +176,29 @@ impl LichessClient {
         }
 
         info!("stream ended (id: `{}`)", game_id);
+    }
+
+    async fn play(&self, game_id: &str, color_prefix: char, state: &json::JsonValue, engine: &mut chessbot2::Engine) {
+        let time = state[color_prefix.to_string() + "time"].as_usize().unwrap();
+        let inc = state[color_prefix.to_string() + "inc"].as_usize().unwrap();
+
+        engine.time_control(chessbot2::TimeControl {
+            time_left: time,
+            time_incr: inc,
+        });
+
+        let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
+            info!(
+                "depth: {depth}, searched {} nodes, PV {} ({eval}cp)",
+                engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
+                engine.find_pv(best, 20).into_iter()
+                .map(|m| m.to_string())
+                .collect::<Vec<_>>()
+                .join(" "),
+            );
+            true
+        });
+        self.send_move(game_id, next).await;
     }
 
     async fn send_move(&self, game_id: &str, m: ChessMove) {
