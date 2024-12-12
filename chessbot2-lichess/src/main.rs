@@ -52,6 +52,9 @@ impl LichessClient {
             match event["type"].as_str() {
                 Some("challenge") => {
                     let challenge = &event["challenge"];
+
+                    if challenge["direction"] == "out" { continue };
+
                     let id = challenge["id"].as_str().unwrap();
                     let user = challenge["challenger"]["name"].as_str().unwrap();
 
@@ -72,7 +75,7 @@ impl LichessClient {
                         };
                     }
 
-                    info!("`{}` challenged bot (id: `{}`)", user, id);
+                    info!("user `{}` challenged bot (id: `{}`, variant: {variant}, time control: {time_ctrl}, rated: {is_rated})", user, id);
                     if !is_su && variant != "standard" {
                         decline!(standard);
                     } else if !is_su && DISALLOWED_TIME_CONTROLS.contains(&time_ctrl) {
@@ -164,6 +167,7 @@ impl LichessClient {
                         self.play(&game_id, color_prefix, &event, &mut engine).await;
                     }
                 },
+                Some("chatLine") => {},
                 Some(typ) => {
                     warn!("got unknown type of event `{}`", typ);
                     dbg!("{:?}", event);
