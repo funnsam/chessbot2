@@ -189,7 +189,7 @@ impl LichessClient {
 
         let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
             info!(
-                "depth: {depth}, searched {} nodes, PV {} ({eval}cp)",
+                "depth: {depth}, searched {} nodes, PV {} ({eval})",
                 engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
                 engine.find_pv(best, 20).into_iter()
                 .map(|m| m.to_string())
