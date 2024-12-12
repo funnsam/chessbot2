@@ -10,7 +10,7 @@ impl Engine {
         self.can_time_out = false;
         let prev = self._evaluate_search(&self.game, 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
-        if !cont(self, prev.clone()) || prev.1 >= Eval::POS_MATE { return prev };
+        if !cont(self, prev.clone()) || prev.1.is_positive_mate() { return prev };
         self.can_time_out = true;
 
         for depth in 2..=255 {
@@ -18,7 +18,7 @@ impl Engine {
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
-            if !cont(self, prev.clone()) || prev.1 >= Eval::POS_MATE { break };
+            if !cont(self, prev.clone()) || prev.1.is_positive_mate() { break };
         }
 
         prev
@@ -48,7 +48,7 @@ impl Engine {
     ) -> (Eval, NodeType) {
         let (next, eval, nt) = self._evaluate_search(game, depth, ply, alpha, beta, in_zw);
 
-        if nt != NodeType::None && !self.times_up() {
+        if nt != NodeType::None && eval.is_mate() && !self.times_up() {
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
                 depth: depth as u8,
                 eval,
@@ -75,7 +75,7 @@ impl Engine {
 
         if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
             let eval = trans.eval;
-            if trans.depth as usize >= depth && eval.0.abs() > Eval::POS_MATE.0 && (trans.node_type == NodeType::Exact
+            if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
                 || (trans.node_type == NodeType::LowerBound && eval >= beta)
                 || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
                 return (trans.next, eval.incr_mate(), NodeType::None);

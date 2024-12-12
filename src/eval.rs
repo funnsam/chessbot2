@@ -20,7 +20,6 @@ impl Eval {
     pub const MAX: Self = Self(i16::MAX);
     pub const MIN: Self = Self(-Self::MAX.0);
     pub const M0: Self = Self(Self::MAX.0);
-    pub const POS_MATE: Self = Self(0x4000);
 
     pub fn incr_mate(self) -> Self {
         match self.0 as u16 >> 14 {
@@ -29,13 +28,21 @@ impl Eval {
             _ => self,
         }
     }
+
+    pub fn is_mate(self) -> bool {
+        matches!(self.0 as u16 >> 14, 1 | 2)
+    }
+
+    pub fn is_positive_mate(self) -> bool {
+        self.0 as u16 >> 14 == 1
+    }
 }
 
 impl core::ops::Neg for Eval {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        if matches!(self.0 as u16 >> 14, 1 | 2) {
+        if self.is_mate() {
             Self(!self.0)
         } else {
             Self(-self.0)
