@@ -191,7 +191,7 @@ impl LichessClient {
             time_incr: inc,
         });
 
-        let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
+        let (next, _, _) = engine.best_move(|engine, (best, eval, depth)| {
             let nodes = engine.nodes();
             let time = engine.elapsed().as_secs_f64();
 

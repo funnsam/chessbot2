@@ -1,6 +1,7 @@
 pub use eval::Eval;
 pub use game::Game;
 use std::time::*;
+use std::sync::{atomic::*, RwLock};
 
 mod eval;
 pub mod game;
@@ -12,11 +13,12 @@ pub struct Engine {
     pub game: Game,
     pub trans_table: trans_table::TransTable,
 
-    time_ref: Instant,
-    time_usable: Duration,
-    can_time_out: bool,
+    time_ref: RwLock<Instant>,
+    time_usable: RwLock<Duration>,
+    can_time_out: AtomicBool,
 
     nodes_searched: core::sync::atomic::AtomicUsize,
+    // search_done: AtomicBool,
 }
 
 impl Engine {
@@ -25,19 +27,37 @@ impl Engine {
             game,
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
 
-            time_ref: Instant::now(),
-            time_usable: Duration::default(),
-            can_time_out: true,
+            time_ref: Instant::now().into(),
+            time_usable: Duration::default().into(),
+            can_time_out: AtomicBool::new(true),
 
-            nodes_searched: core::sync::atomic::AtomicUsize::new(0),
+            nodes_searched: AtomicUsize::new(0),
+            // search_done: AtomicBool::new(false),
         }
     }
+
+    // pub fn ponder(self: Arc<Self>) {
+    //     self.allow_for(Duration::ZERO);
+    //     self.can_time_out.store(false, Ordering::Relaxed);
+
+    //     {
+    //         let engine = Arc::clone(&self);
+    //         std::thread::spawn(move || {
+    //             engine.best_move(|_, _| true);
+    //         });
+    //     }
+    // }
+
+    // pub fn stop_ponder(&self) {
+    //     self.can_time_out.store(true, Ordering::Relaxed);
+    //     while !self.search_done.load(Ordering::Relaxed) {}
+    // }
 
     pub fn resize_hash(&mut self, hash_size_bytes: usize) {
         self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
     }
 
-    pub fn time_control(&mut self, time_ctrl: TimeControl) {
+    pub fn time_control(&self, time_ctrl: TimeControl) {
         // https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V2-UCI/Chess-Coding-Adventure/src/Bot.cs#L64
 
         let left = time_ctrl.time_left as u64;
@@ -50,15 +70,15 @@ impl Engine {
         }
 
         let min_think = (left / 4).min(50);
-        self.time_usable = Duration::from_millis(min_think.max(think_time));
+        *self.time_usable.write().unwrap() = Duration::from_millis(min_think.max(think_time));
     }
 
-    pub fn allow_for(&mut self, time: Duration) {
-        self.time_usable = time;
+    pub fn allow_for(&self, time: Duration) {
+        *self.time_usable.write().unwrap() = time;
     }
 
     pub fn times_up(&self) -> bool {
-        self.can_time_out && self.elapsed() > self.time_usable
+        self.can_time_out.load(Ordering::Relaxed) && self.elapsed() > *self.time_usable.read().unwrap()
     }
 
     pub fn find_pv(&self, best: chess::ChessMove, max: usize) -> Vec<chess::ChessMove> {
@@ -81,11 +101,11 @@ impl Engine {
     }
 
     pub fn nodes(&self) -> usize {
-        self.nodes_searched.load(std::sync::atomic::Ordering::Relaxed)
+        self.nodes_searched.load(Ordering::Relaxed)
     }
 
     pub fn elapsed(&self) -> Duration {
-        self.time_ref.elapsed()
+        self.time_ref.read().unwrap().elapsed()
     }
 
     pub fn tt_size(&self) -> usize { self.trans_table.size() }

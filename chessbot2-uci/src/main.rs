@@ -50,7 +50,7 @@ fn main() {
                     engine.allow_for(std::time::Duration::MAX);
                 }
 
-                let (mov, ..) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
+                let (mov, ..) = engine.best_move(|engine, (best, eval, depth)| {
                     let time = engine.elapsed();
                     let nodes = engine.nodes();
 
