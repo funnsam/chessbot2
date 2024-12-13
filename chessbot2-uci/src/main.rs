@@ -51,9 +51,13 @@ fn main() {
                 }
 
                 let (mov, ..) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
+                    let time = engine.elapsed();
+                    let nodes = engine.nodes();
+
                     println!(
-                        "info score {eval:#} seldepth {depth} depth {depth} nodes {} pv {}",
-                        engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
+                        "info score {eval:#} seldepth {depth} depth {depth} nodes {nodes} time {} nps {:.2} pv {}",
+                        time.as_millis(),
+                        nodes as f64 / time.as_secs_f64() / 1_000_000.0,
                         engine.find_pv(best, if debug_mode { 100 } else { 20 }).into_iter()
                             .map(|m| m.to_string())
                             .collect::<Vec<_>>()

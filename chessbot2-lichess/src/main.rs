@@ -192,9 +192,12 @@ impl LichessClient {
         });
 
         let (next, _, _) = engine.best_move_iter_deep(|engine, (best, eval, depth)| {
+            let nodes = engine.nodes();
+            let time = engine.elapsed().as_secs_f64();
+
             info!(
-                "depth: {depth}, searched {} nodes, PV {} ({eval})",
-                engine.nodes_searched.load(std::sync::atomic::Ordering::Relaxed),
+                "depth: {depth}, searched {nodes} nodes in {time:.2}s ({:.2} MN/s), PV: {} ({eval})",
+                nodes as f64 / time / 1_000_000.0,
                 engine.find_pv(best, 20).into_iter()
                 .map(|m| m.to_string())
                 .collect::<Vec<_>>()
@@ -206,18 +209,22 @@ impl LichessClient {
     }
 
     async fn send_move(&self, game_id: &str, m: ChessMove) {
-        let client = Client::new();
-        let resp = client.execute(
-            client
-            .post(format!("https://lichess.org/api/bot/game/{game_id}/move/{m}"))
-            .header("Authorization", format!("Bearer {}", self.api_token))
-            .build().unwrap()
-        ).await.unwrap();
+        loop {
+            let client = Client::new();
+            if let Ok(resp) = client.execute(
+                client
+                .post(format!("https://lichess.org/api/bot/game/{game_id}/move/{m}"))
+                .header("Authorization", format!("Bearer {}", self.api_token))
+                .build().unwrap()
+            ).await {
+                if !resp.status().is_success() {
+                    let reason = json::parse(&resp.text().await.unwrap()).unwrap();
+                    let reason = reason["error"].as_str().unwrap();
+                    warn!("move {} invalid ({})", m, reason);
+                }
 
-        if !resp.status().is_success() {
-            let reason = json::parse(&resp.text().await.unwrap()).unwrap();
-            let reason = reason["error"].as_str().unwrap();
-            warn!("move {} invalid ({})", m, reason);
+                break;
+            }
         }
     }
 }

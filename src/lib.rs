@@ -12,11 +12,11 @@ pub struct Engine {
     pub game: Game,
     pub trans_table: trans_table::TransTable,
 
-    pub time_ref: Instant,
-    pub time_usable: Duration,
+    time_ref: Instant,
+    time_usable: Duration,
     can_time_out: bool,
 
-    pub nodes_searched: core::sync::atomic::AtomicUsize,
+    nodes_searched: core::sync::atomic::AtomicUsize,
 }
 
 impl Engine {
@@ -58,7 +58,7 @@ impl Engine {
     }
 
     pub fn times_up(&self) -> bool {
-        self.can_time_out && self.time_ref.elapsed() > self.time_usable
+        self.can_time_out && self.elapsed() > self.time_usable
     }
 
     pub fn find_pv(&self, best: chess::ChessMove, max: usize) -> Vec<chess::ChessMove> {
@@ -78,6 +78,14 @@ impl Engine {
         }
 
         pv
+    }
+
+    pub fn nodes(&self) -> usize {
+        self.nodes_searched.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        self.time_ref.elapsed()
     }
 
     pub fn tt_size(&self) -> usize { self.trans_table.size() }
