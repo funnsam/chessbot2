@@ -169,6 +169,8 @@ impl Engine {
 
         let mut moves = MoveGen::new_legal(game.board());
         moves.set_iterator_mask(*game.board().combined());
+        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
+
         for m in moves {
             let game = game.make_move(m);
             let eval = -self.quiescence_search(&game, -beta, -alpha);

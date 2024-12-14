@@ -55,9 +55,9 @@ fn main() {
                     let nodes = engine.nodes();
 
                     println!(
-                        "info score {eval:#} seldepth {depth} depth {depth} nodes {nodes} time {} nps {:.2} pv {}",
+                        "info score {eval:#} seldepth {depth} depth {depth} nodes {nodes} time {} nps {} pv {}",
                         time.as_millis(),
-                        nodes as f64 / time.as_secs_f64() / 1_000_000.0,
+                        (nodes as f64 / time.as_secs_f64()) as u64,
                         engine.find_pv(best, if debug_mode { 100 } else { 20 }).into_iter()
                             .map(|m| m.to_string())
                             .collect::<Vec<_>>()
