@@ -54,3 +54,51 @@ impl Game {
 
     pub fn history_len(&self) -> usize { self.hash_history.len() }
 }
+
+impl core::fmt::Display for Game {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for rank in chess::ALL_RANKS.iter().rev() {
+            let get = |file| {
+                let sq = chess::Square::make_square(*rank, file);
+                let bg = if (file.to_index() + rank.to_index()) & 1 == 0 { 232 } else { 234 };
+
+                self.board().piece_on(sq).map_or_else(
+                    || if f.alternate() { format!("\x1b[48;5;{bg}m \x1b[0m") } else { " ".to_string() },
+                    |p| {
+                        let c = self.board().color_on(sq).unwrap();
+
+                        if f.alternate() {
+                            format!("\x1b[1;38;5;{};48;5;{bg}m{}\x1b[0m", 255 - c.to_index() * 8, p.to_string(c))
+                        } else {
+                            p.to_string(c)
+                        }
+                    }
+                )
+            };
+
+            let pa = get(chess::File::A);
+            let pb = get(chess::File::B);
+            let pc = get(chess::File::C);
+            let pd = get(chess::File::D);
+            let pe = get(chess::File::E);
+            let pf = get(chess::File::F);
+            let pg = get(chess::File::G);
+            let ph = get(chess::File::H);
+
+            if *rank == chess::Rank::Eighth {
+                writeln!(f, "┌━━━┬━━━┬━━━┬━━━┬━━━┬━━━┬━━━┬━━{}┐", ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈'][rank.to_index()])?;
+            } else {
+                writeln!(f, "├━━━┼━━━┼━━━┼━━━┼━━━┼━━━┼━━━┼━━{}┤", ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈'][rank.to_index()])?;
+            }
+            writeln!(f, "│ {pa} │ {pb} │ {pc} │ {pd} │ {pe} │ {pf} │ {pg} │ {ph} │")?;
+        }
+
+        writeln!(f, "└ᵃ━━┴ᵇ━━┴ᶜ━━┴ᵈ━━┴ᵉ━━┴ᶠ━━┴ᵍ━━┴ʰ━━┘")?;
+        writeln!(f)?;
+        let rfen = self.board().to_string();
+        writeln!(f, "FEN: {} {} {}", &rfen[..rfen.len() - 4], self.fifty_move_counter, self.hash_history.len() / 2 + 1)?;
+        writeln!(f, "Hash: 0x{:016x}", self.board().get_hash())?;
+
+        Ok(())
+    }
+}

@@ -72,6 +72,7 @@ fn main() {
                 }
                 println!("bestmove {mov}");
             },
+            Some(uci::UciCommand::D) => print!("{:#}", engine.game),
             None => println!("info string got unknown command {l}"),
         }
     }
