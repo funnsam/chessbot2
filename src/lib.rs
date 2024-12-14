@@ -5,6 +5,7 @@ use std::sync::{atomic::*, RwLock};
 
 mod eval;
 pub mod game;
+mod move_order;
 mod search;
 mod shared_table;
 mod trans_table;

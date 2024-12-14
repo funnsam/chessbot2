@@ -95,9 +95,14 @@ impl core::fmt::Display for Game {
 
         writeln!(f, "└ᵃ━━┴ᵇ━━┴ᶜ━━┴ᵈ━━┴ᵉ━━┴ᶠ━━┴ᵍ━━┴ʰ━━┘")?;
         writeln!(f)?;
+
         let rfen = self.board().to_string();
         writeln!(f, "FEN: {} {} {}", &rfen[..rfen.len() - 4], self.fifty_move_counter, self.hash_history.len() / 2 + 1)?;
         writeln!(f, "Hash: 0x{:016x}", self.board().get_hash())?;
+        writeln!(f)?;
+
+        let phase = crate::eval::game_phase(self.board()) as usize;
+        writeln!(f, "Phase: {0:█<1$}{0:░<phase$} end", "", 24 - phase)?;
 
         Ok(())
     }

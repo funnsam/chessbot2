@@ -110,12 +110,7 @@ impl Engine {
         let mut moves: Vec<_> = MoveGen::new_legal(game.board())
             .map(|m| (m, game.make_move(m)))
             .collect();
-        moves.sort_unstable_by_key(|(_, game)| {
-            self.trans_table.get(game.board().get_hash()).map_or_else(
-                || evaluate_static(game.board()),
-                |t| t.eval,
-            )
-        });
+        self.order_moves(&mut moves);
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let mut best = (ChessMove::default(), Eval::MIN);

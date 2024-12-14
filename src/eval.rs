@@ -1,5 +1,3 @@
-// https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function
-
 use chess::*;
 
 /// Evaluation score in centipawns. +ve is side to move better and -ve is worse
@@ -12,7 +10,6 @@ use chess::*;
 ///      min cp   0   max cp
 ///      -16383        16383
 /// ```
-
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Eval(pub i16);
 
@@ -86,6 +83,7 @@ fn test_eval() {
     assert_eq!(m_1.0 as u16, 0x8001);
 }
 
+/// Implements https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function
 pub fn evaluate_static(board: &Board) -> Eval {
     let mut mid_game = [0, 0];
     let mut end_game = [0, 0];
@@ -110,6 +108,11 @@ pub fn evaluate_static(board: &Board) -> Eval {
     let eg_phase = 24 - mg_phase;
 
     Eval(((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / 24) as i16)
+}
+
+/// Finds the current phase of the game. 0 is endgame and 24 is midgame.
+pub fn game_phase(board: &Board) -> u8 {
+    board.combined().into_iter().map(|sq| PIECE_PHASE[unsafe { board.piece_on(sq).unwrap_unchecked() }.to_index()]).sum::<u8>().min(24)
 }
 
 const PIECE_VALUE_MID: [i16; 6] = [82, 337, 365, 477, 1025,  0];
