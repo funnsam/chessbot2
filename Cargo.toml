@@ -15,7 +15,8 @@ fxhash = "0.2.1"
 [profile.release]
 opt-level = 3
 debug = false
-lto = "yes"
+lto = "fat"
+codegen-units = 1
 
 [profile.dev]
 opt-level = 3
