@@ -12,7 +12,7 @@ mod trans_table;
 
 pub struct Engine {
     pub game: Game,
-    pub trans_table: trans_table::TransTable,
+    trans_table: trans_table::TransTable,
 
     time_ref: RwLock<Instant>,
     time_usable: RwLock<Duration>,
