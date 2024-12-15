@@ -42,8 +42,6 @@ impl crate::Engine {
             killer.0[m.get_source().to_index() * 64 + m.get_dest().to_index()]
         };
 
-        // TODO: not sure if this ordering is correct
-        // current 9-3-8 rev
         value(b).cmp(&value(a))
     }
 }
