@@ -114,15 +114,15 @@ impl Engine {
             }
         }
 
-        let mut moves: Vec<_> = MoveGen::new_legal(game.board())
-            .map(|m| (m, game.make_move(m)))
-            .collect();
+        let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<[_; 256]>>();
         self.order_moves(&mut moves, game, &p_killer);
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let mut best = (ChessMove::default(), Eval::MIN);
         let _game = &game;
-        for (i, (m, game)) in moves.into_iter().enumerate() {
+        for (i, m) in moves.into_iter().enumerate() {
+            let game = _game.make_move(m);
+
             let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential

@@ -131,6 +131,7 @@ dependencies = [
 name = "chessbot2"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "bytemuck",
  "chess",
  "fxhash",
