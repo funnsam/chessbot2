@@ -195,7 +195,7 @@ impl LichessClient {
             let time = engine.elapsed().as_secs_f64();
 
             info!(
-                "depth: {depth}, searched {nodes} nodes in {time:.2}s ({:.2} MN/s), PV: {} ({eval})",
+                "searched {nodes} nodes at {depth}-ply deep in {time:.2}s ({:.2} MN/s), PV: {} ({eval})",
                 nodes as f64 / time / 1_000_000.0,
                 engine.find_pv(best, 20).into_iter()
                 .map(|m| m.to_string())
