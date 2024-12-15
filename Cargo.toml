@@ -1,5 +1,5 @@
 [workspace]
-members = [ "chessbot2-lichess","chessbot2-uci"]
+members = ["chess", "chessbot2-lichess","chessbot2-uci"]
 
 [package]
 name = "chessbot2"
@@ -7,7 +7,26 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-arrayvec = "0.5.2"
+arrayvec = "0.7"
 bytemuck = { version = "1.20.0", features = ["derive"] }
-chess = "3.2.0"
+chess = { version = "4.0.0", path = "chess" }
 fxhash = "0.2.1"
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = "yes"
+
+[profile.dev]
+opt-level = 3
+debug = true
+
+[profile.test]
+opt-level = 3
+
+[profile.dev.build-override]
+opt-level = 3
+[profile.release.build-override]
+opt-level = 3
+[profile.test.build-override]
+opt-level = 3

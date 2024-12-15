@@ -1,3 +1,4 @@
+#![allow(unused_macros)]
 macro_rules! dbg {
     ($($args: tt)*) => {
         eprint!("\x1b[90mDebug:\x1b[0m ");

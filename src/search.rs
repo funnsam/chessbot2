@@ -114,7 +114,7 @@ impl Engine {
             }
         }
 
-        let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<[_; 256]>>();
+        let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
         self.order_moves(&mut moves, game, &p_killer);
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 

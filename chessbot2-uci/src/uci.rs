@@ -26,14 +26,10 @@ pub enum UciCommand<'a> {
 
 fn move_from_uci(m: &str) -> ChessMove {
     let src = &m[0..2];
-    let src = unsafe {
-        Square::new(((src.as_bytes()[1] - b'1') << 3) + (src.as_bytes()[0] - b'a'))
-    };
+    let src = Square::new(((src.as_bytes()[1] - b'1') << 3) + (src.as_bytes()[0] - b'a'));
 
     let dst = &m[2..4];
-    let dst = unsafe {
-        Square::new(((dst.as_bytes()[1] - b'1') << 3) + (dst.as_bytes()[0] - b'a'))
-    };
+    let dst = Square::new(((dst.as_bytes()[1] - b'1') << 3) + (dst.as_bytes()[0] - b'a'));
 
     let piece = m.as_bytes().get(4).and_then(|p| match p {
         b'n' => Some(Piece::Knight),
