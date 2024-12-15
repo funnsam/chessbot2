@@ -31,7 +31,7 @@ fn main() {
             Some(uci::UciCommand::Quit) => std::process::exit(0),
             Some(uci::UciCommand::UciNewGame) => {},
             Some(uci::UciCommand::Position { position, moves }) => {
-                engine.game = Game::new(position);
+                engine.game = position;
                 for m in moves {
                     engine.game = engine.game.make_move(m);
                 }
@@ -73,6 +73,7 @@ fn main() {
                 println!("bestmove {mov}");
             },
             Some(uci::UciCommand::D) => print!("{:#}", engine.game),
+            Some(uci::UciCommand::Move(m)) => engine.game = engine.game.make_move(m),
             None => println!("info string got unknown command {l}"),
         }
     }

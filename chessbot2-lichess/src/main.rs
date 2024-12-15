@@ -104,11 +104,10 @@ impl LichessClient {
                         },
                     };
                     let fen = game["fen"].as_str().unwrap();
-                    let board = Board::from_str(fen).unwrap();
+                    let game = chessbot2::Game::from_str(fen).unwrap();
 
                     info!("started a game with `{}` (id: `{}`, fen: `{}`)", user, id, fen);
 
-                    let game = chessbot2::Game::new(board);
                     let arc = Arc::clone(&self);
                     tokio::spawn(async move { arc.play_game(id, game, color).await });
                 },

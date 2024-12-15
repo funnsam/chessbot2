@@ -3,14 +3,13 @@ use std::time::Duration;
 use chess::*;
 use chessbot2::TimeControl;
 
-#[derive(Debug)]
 pub enum UciCommand<'a> {
     Uci,
     Debug(bool),
     IsReady,
     UciNewGame,
     Position {
-        position: Board,
+        position: chessbot2::Game,
         moves: Vec<ChessMove>,
     },
     Go {
@@ -22,6 +21,7 @@ pub enum UciCommand<'a> {
     SetOption(&'a str, Option<&'a str>),
     Quit,
     D,
+    Move(ChessMove),
 }
 
 fn move_from_uci(m: &str) -> ChessMove {
@@ -67,10 +67,10 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
                     fen += " ";
                 }
 
-                Board::from_str(fen.trim()).ok()?
+                chessbot2::Game::from_str(fen.trim()).ok()?
             } else if matches!(next, Some("startpos")) {
                 token.next();
-                Board::default()
+                chessbot2::Game::default()
             } else {
                 return None;
             };
@@ -126,6 +126,7 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
         },
         Some("quit") => Some(UciCommand::Quit),
         Some("d") => Some(UciCommand::D),
+        Some("move") => Some(UciCommand::Move(move_from_uci(token.next()?))),
         Some(_) => parse_command(token),
         None => None,
     }

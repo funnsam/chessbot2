@@ -1,3 +1,5 @@
+use core::str::FromStr;
+
 #[derive(Clone)]
 pub struct Game {
     board: chess::Board,
@@ -53,6 +55,15 @@ impl Game {
     }
 
     pub fn history_len(&self) -> usize { self.hash_history.len() }
+
+    pub fn get_fen(&self) -> String {
+        let rfen = self.board().to_string();
+        format!(
+            "{} {} {}",
+            &rfen[..rfen.len() - 4], self.fifty_move_counter,
+            self.hash_history.len() / 2 + 1,
+        )
+    }
 }
 
 impl core::fmt::Display for Game {
@@ -86,18 +97,17 @@ impl core::fmt::Display for Game {
             let ph = get(chess::File::H);
 
             if *rank == chess::Rank::Eighth {
-                writeln!(f, "┌━━━┬━━━┬━━━┬━━━┬━━━┬━━━┬━━━┬━━{}┐", ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈'][rank.to_index()])?;
+                writeln!(f, "┌───┬───┬───┬───┬───┬───┬───┬──{}┐", ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈'][rank.to_index()])?;
             } else {
-                writeln!(f, "├━━━┼━━━┼━━━┼━━━┼━━━┼━━━┼━━━┼━━{}┤", ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈'][rank.to_index()])?;
+                writeln!(f, "├───┼───┼───┼───┼───┼───┼───┼──{}┤", ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈'][rank.to_index()])?;
             }
             writeln!(f, "│ {pa} │ {pb} │ {pc} │ {pd} │ {pe} │ {pf} │ {pg} │ {ph} │")?;
         }
 
-        writeln!(f, "└ᵃ━━┴ᵇ━━┴ᶜ━━┴ᵈ━━┴ᵉ━━┴ᶠ━━┴ᵍ━━┴ʰ━━┘")?;
+        writeln!(f, "└ᵃ──┴ᵇ──┴ᶜ──┴ᵈ──┴ᵉ──┴ᶠ──┴ᵍ──┴ʰ──┘")?;
         writeln!(f)?;
 
-        let rfen = self.board().to_string();
-        writeln!(f, "FEN: {} {} {}", &rfen[..rfen.len() - 4], self.fifty_move_counter, self.hash_history.len() / 2 + 1)?;
+        writeln!(f, "FEN: {}", self.get_fen())?;
         writeln!(f, "Hash: 0x{:016x}", self.board().get_hash())?;
         writeln!(f)?;
 
@@ -105,5 +115,27 @@ impl core::fmt::Display for Game {
         writeln!(f, "Phase: {0:█<1$}{0:░<phase$} end", "", 24 - phase)?;
 
         Ok(())
+    }
+}
+
+impl FromStr for Game {
+    type Err = Box<dyn core::error::Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (rest, moves) = s.rsplit_once(' ').ok_or("")?;
+        let (_, fmc) = rest.rsplit_once(' ').ok_or("")?;
+        let board = chess::Board::from_str(s).map_err(|_| "")?;
+
+        Ok(Self {
+            board,
+            fifty_move_counter: fmc.parse()?,
+            hash_history: (0..moves.parse::<u64>()? * 2 - (board.side_to_move() == chess::Color::White) as u64).collect(),
+        })
+    }
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self::new(chess::Board::default())
     }
 }
