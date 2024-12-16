@@ -1,5 +1,5 @@
 use core::cmp::*;
-use crate::Game;
+use crate::{see, Game};
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
@@ -27,6 +27,7 @@ impl crate::Engine {
         moves.sort_unstable_by(|a, b| {
             self.cmp_hash(game, *a, *b)
                 .then_with(|| mvv_lva(game, *a, *b))
+                .then_with(|| see_order(game, *a, *b))
                 .then_with(|| self.killer_heuristic(killer, *a, *b))
         });
     }
@@ -43,6 +44,10 @@ impl crate::Engine {
 
         value(b).cmp(&value(a))
     }
+}
+
+fn see_order(game: &Game, a: ChessMove, b: ChessMove) -> Ordering {
+    see(game, a).cmp(&see(game, b))
 }
 
 fn mvv_lva(game: &Game, a: ChessMove, b: ChessMove) -> Ordering {
