@@ -121,7 +121,7 @@ pub const PIECE_VALUE: [i16; 6] = [
     PIECE_VALUE_MID[2],
     PIECE_VALUE_MID[3],
     PIECE_VALUE_MID[4],
-    20000,
+    200_00,
 ];
 
 const PIECE_VALUE_MID: [i16; 6] = [82, 337, 365, 477, 1025,  0];

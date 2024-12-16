@@ -1,6 +1,6 @@
 pub use eval::Eval;
 pub use game::Game;
-pub(crate) use see::see;
+pub use see::see;
 use std::time::*;
 use std::sync::{atomic::*, RwLock};
 

@@ -64,17 +64,50 @@ impl Game {
             self.hash_history.len() / 2 + 1,
         )
     }
+
+    pub fn visualize(&self, bitboard: chess::BitBoard) {
+        for rank in chess::ALL_RANKS.iter().rev() {
+            let get = |file| {
+                let sq = chess::Square::make_square(*rank, file);
+                let bg = if (chess::BitBoard::from_square(sq) & bitboard).0 != 0 { 1 } else { 232 };
+
+                self.board().piece_on(sq).map_or_else(
+                    || format!("\x1b[48;5;{bg}m \x1b[0m"),
+                    |p| {
+                        let c = self.board().color_on(sq).unwrap();
+
+                        format!("\x1b[1;38;5;{};48;5;{bg}m{}\x1b[0m", 255 - c.to_index() * 8, p.to_string(c))
+                    }
+                )
+            };
+
+            let pa = get(chess::File::A);
+            let pb = get(chess::File::B);
+            let pc = get(chess::File::C);
+            let pd = get(chess::File::D);
+            let pe = get(chess::File::E);
+            let pf = get(chess::File::F);
+            let pg = get(chess::File::G);
+            let ph = get(chess::File::H);
+
+            if *rank == chess::Rank::Eighth {
+                println!("┌───┬───┬───┬───┬───┬───┬───┬──{}┐", ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈'][rank.to_index()]);
+            } else {
+                println!("├───┼───┼───┼───┼───┼───┼───┼──{}┤", ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈'][rank.to_index()]);
+            }
+            println!("│ {pa} │ {pb} │ {pc} │ {pd} │ {pe} │ {pf} │ {pg} │ {ph} │");
+        }
+
+        println!("└ᵃ──┴ᵇ──┴ᶜ──┴ᵈ──┴ᵉ──┴ᶠ──┴ᵍ──┴ʰ──┘");
+    }
 }
 
 impl core::fmt::Display for Game {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // let atk = self.board().pseudo_attacks(self.board().side_to_move());
-
         for rank in chess::ALL_RANKS.iter().rev() {
             let get = |file| {
                 let sq = chess::Square::make_square(*rank, file);
                 let bg = if (file.to_index() + rank.to_index()) & 1 == 0 { 232 } else { 234 };
-                // let bg = if (chess::BitBoard::from_square(sq) & atk).0 != 0 { 1 } else { 232 };
 
                 self.board().piece_on(sq).map_or_else(
                     || if f.alternate() { format!("\x1b[48;5;{bg}m \x1b[0m") } else { " ".to_string() },

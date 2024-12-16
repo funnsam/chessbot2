@@ -5,7 +5,8 @@ use chess::{BitBoard, ChessMove, Color, ALL_PIECES};
 pub fn see(game: &Game, m: ChessMove) -> i16 {
     fn smallest_attacker(attadef: BitBoard, stm: Color, game: &Game) -> BitBoard {
         for pt in ALL_PIECES {
-            let subset = attadef & game.board().pieces(pt) & game.board().color_combined(!stm);
+            let subset = attadef & game.board().pieces(pt) & game.board().color_combined(stm);
+            // game.visualize(subset);
 
             if subset.0 != 0 {
                 return subset & BitBoard::new(!subset.0 + 1);
@@ -30,9 +31,17 @@ pub fn see(game: &Game, m: ChessMove) -> i16 {
             gain[d] = PIECE_VALUE[attacker.to_index()] - gain[d - 1];
 
             attadef ^= from;
+            // game.visualize(attadef);
             combined ^= from;
+            // game.visualize(combined);
+
+            // TODO: attadef |= xrays
+            // 7k/4r3/4q3/8/4Q3/3P1B2/8/K7 b - - 0 1
+            // the black rook was covered and opened up by black queen currently not considered
+
             stm = !stm;
             from = smallest_attacker(attadef, stm, game);
+            // game.visualize(from);
 
             max_d = d;
 
