@@ -121,6 +121,8 @@ impl Engine {
         let mut best = (ChessMove::default(), Eval::MIN);
         let _game = &game;
         for (i, m) in moves.into_iter().enumerate() {
+            if i != 0 && depth < 5 && see(_game, m) < 0 { continue };
+
             let game = _game.make_move(m);
 
             let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
