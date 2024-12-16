@@ -1,6 +1,6 @@
 use core::cmp::*;
 use crate::Game;
-use crate::eval::PIECE_VALUE_MID;
+use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
 pub struct KillerTable(pub [usize; 64 * 64]);
@@ -46,12 +46,12 @@ impl crate::Engine {
 }
 
 fn mvv_lva(game: &Game, a: ChessMove, b: ChessMove) -> Ordering {
-    const P: i16 = PIECE_VALUE_MID[0];
-    const N: i16 = PIECE_VALUE_MID[1];
-    const B: i16 = PIECE_VALUE_MID[2];
-    const R: i16 = PIECE_VALUE_MID[3];
-    const Q: i16 = PIECE_VALUE_MID[4];
-    const K: i16 = 20_000;
+    const P: i16 = PIECE_VALUE[0];
+    const N: i16 = PIECE_VALUE[1];
+    const B: i16 = PIECE_VALUE[2];
+    const R: i16 = PIECE_VALUE[3];
+    const Q: i16 = PIECE_VALUE[4];
+    const K: i16 = PIECE_VALUE[5];
     const MVV_LVA: [[i16; 6]; 6] = [
     // victim                                      aggressor
     //   P      N      B      R      Q      x

@@ -115,9 +115,18 @@ pub fn game_phase(board: &Board) -> u8 {
     board.combined().into_iter().map(|sq| PIECE_PHASE[unsafe { board.piece_on(sq).unwrap_unchecked() }.to_index()]).sum::<u8>().min(24)
 }
 
-pub const PIECE_VALUE_MID: [i16; 6] = [82, 337, 365, 477, 1025,  0];
-pub const PIECE_VALUE_END: [i16; 6] = [94, 281, 297, 512,  936,  0];
-pub const PIECE_PHASE: [u8; 6] = [0, 1, 1, 2, 4, 0];
+pub const PIECE_VALUE: [i16; 6] = [
+    PIECE_VALUE_MID[0],
+    PIECE_VALUE_MID[1],
+    PIECE_VALUE_MID[2],
+    PIECE_VALUE_MID[3],
+    PIECE_VALUE_MID[4],
+    200_00,
+];
+
+const PIECE_VALUE_MID: [i16; 6] = [82, 337, 365, 477, 1025,  0];
+const PIECE_VALUE_END: [i16; 6] = [94, 281, 297, 512,  936,  0];
+const PIECE_PHASE: [u8; 6] = [0, 1, 1, 2, 4, 0];
 
 // a1 ----> h1
 // |

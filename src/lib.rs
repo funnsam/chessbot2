@@ -1,5 +1,6 @@
 pub use eval::Eval;
 pub use game::Game;
+pub use see::see;
 use std::time::*;
 use std::sync::{atomic::*, RwLock};
 
@@ -7,6 +8,7 @@ mod eval;
 pub mod game;
 mod move_order;
 mod search;
+mod see;
 mod shared_table;
 mod trans_table;
 

@@ -22,6 +22,7 @@ pub enum UciCommand<'a> {
     Quit,
     D,
     Move(ChessMove),
+    See(ChessMove),
 }
 
 fn move_from_uci(m: &str) -> ChessMove {
@@ -123,6 +124,7 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
         Some("quit") => Some(UciCommand::Quit),
         Some("d") => Some(UciCommand::D),
         Some("move") => Some(UciCommand::Move(move_from_uci(token.next()?))),
+        Some("see") => Some(UciCommand::See(move_from_uci(token.next()?))),
         Some(_) => parse_command(token),
         None => None,
     }

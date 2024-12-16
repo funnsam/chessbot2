@@ -74,6 +74,7 @@ fn main() {
             },
             Some(uci::UciCommand::D) => print!("{:#}", engine.game),
             Some(uci::UciCommand::Move(m)) => engine.game = engine.game.make_move(m),
+            Some(uci::UciCommand::See(m)) => println!("{}", chessbot2::see(&engine.game, m)),
             None => println!("info string got unknown command {l}"),
         }
     }
