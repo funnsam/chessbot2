@@ -9,13 +9,13 @@ impl Engine {
         self.nodes_searched.store(0, Ordering::Relaxed);
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self._evaluate_search(&self.game, &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
+        let prev = self._evaluate_search(&self.game, &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, true);
         let mut prev = (prev.0, prev.1, 1);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
         if !cont(self, prev.clone()) || prev.1.is_positive_mate() { return prev };
 
         for depth in 2..=255 {
-            let this = self._evaluate_search(&self.game, &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+            let this = self._evaluate_search(&self.game, &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, true);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -33,8 +33,9 @@ impl Engine {
         depth: usize,
         ply: usize,
         beta: Eval,
+        in_pv: bool,
     ) -> (Eval, NodeType) {
-        self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, true)
+        self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, in_pv)
     }
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
@@ -47,9 +48,9 @@ impl Engine {
         ply: usize,
         alpha: Eval,
         beta: Eval,
-        in_zw: bool,
+        in_pv: bool,
     ) -> (Eval, NodeType) {
-        let (next, eval, nt) = self._evaluate_search(game, killer, depth, ply, alpha, beta, in_zw);
+        let (next, eval, nt) = self._evaluate_search(game, killer, depth, ply, alpha, beta, in_pv);
 
         if nt != NodeType::None && !eval.is_mate() && !self.times_up() {
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
@@ -63,6 +64,32 @@ impl Engine {
         (eval, nt)
     }
 
+    fn pvs(
+        &self,
+        expect_pv: bool,
+        game: &Game,
+        killer: &mut KillerTable,
+        depth: usize,
+        ply: usize,
+        alpha: Eval,
+        beta: Eval,
+        in_pv: bool,
+    ) -> (Eval, NodeType) {
+        if expect_pv {
+            self.evaluate_search(game, killer, depth, ply, alpha, beta, in_pv)
+        } else {
+            let zw = self.zw_search(game, killer, depth, ply, beta, false);
+
+            // NOTE: -beta instead of alpha becaused params fipped in caller, same w -alpha to beta
+            // eval is negated because its supposed to
+            if -beta < -zw.0 && -zw.0 < -alpha && in_pv {
+                self.evaluate_search(game, killer, depth, ply, alpha, beta, true)
+            } else {
+                zw
+            }
+        }
+    }
+
     fn _evaluate_search(
         &self,
         game: &Game,
@@ -71,7 +98,7 @@ impl Engine {
         ply: usize,
         mut alpha: Eval,
         beta: Eval,
-        in_zw: bool,
+        in_pv: bool,
     ) -> (ChessMove, Eval, NodeType) {
         if game.can_declare_draw() {
             return (ChessMove::default(), Eval(0), NodeType::None);
@@ -104,10 +131,10 @@ impl Engine {
         let mut killer = KillerTable::new();
         let in_check = game.board().checkers().0 != 0;
 
-        if ply != 0 && !in_check && depth > 3 && !in_zw {
+        if ply != 0 && !in_check && depth > 3 {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let (neg_eval, _) = self.zw_search(&game, &mut killer, depth - r, ply + 1, Eval(1 - beta.0));
+            let (neg_eval, _) = self.zw_search(&game, &mut killer, depth - r, ply + 1, Eval(1 - beta.0), false);
 
             if -neg_eval >= beta {
                 return (ChessMove::default(), (-neg_eval).incr_mate(), NodeType::None);
@@ -139,11 +166,11 @@ impl Engine {
                 }
             }
 
-            let (mut neg_eval, mut nt) = self.evaluate_search(&game, &mut killer, this_depth, ply + 1, -beta, -alpha, in_zw);
+            let (mut neg_eval, mut nt) = self.pvs(i == 0, &game, &mut killer, this_depth, ply + 1, -beta, -alpha, in_pv);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
             if this_depth < depth - 1 && best.1 < -neg_eval {
-                let new = self.evaluate_search(&game, &mut killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
+                let new = self.pvs(i == 0, &game, &mut killer, depth - 1, ply + 1, -beta, -alpha, in_pv);
 
                 if !self.times_up() {
                     (neg_eval, nt) = new;
