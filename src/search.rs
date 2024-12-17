@@ -80,9 +80,8 @@ impl Engine {
         } else {
             let zw = self.zw_search(game, killer, depth, ply, beta, false);
 
-            // NOTE: -beta instead of alpha becaused params fipped in caller, same w -alpha to beta
-            // eval is negated because its supposed to
-            if -beta < -zw.0 && -zw.0 < -alpha && in_pv {
+            // NOTE: -beta instead of alpha becaused params fipped in caller
+            if -zw.0 > -beta && beta.0 != alpha.0 + 1 {
                 self.evaluate_search(game, killer, depth, ply, alpha, beta, true)
             } else {
                 zw
