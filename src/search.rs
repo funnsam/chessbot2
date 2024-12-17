@@ -33,9 +33,8 @@ impl Engine {
         depth: usize,
         ply: usize,
         beta: Eval,
-        in_pv: bool,
     ) -> (Eval, NodeType) {
-        self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, in_pv)
+        self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, false)
     }
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
@@ -78,10 +77,10 @@ impl Engine {
         if expect_pv {
             self.evaluate_search(game, killer, depth, ply, alpha, beta, in_pv)
         } else {
-            let zw = self.zw_search(game, killer, depth, ply, beta, false);
+            let zw = self.zw_search(game, killer, depth, ply, beta);
 
-            // NOTE: -beta instead of alpha becaused params fipped in caller
-            if -zw.0 > -beta && beta.0 != alpha.0 + 1 {
+            // NOTE: params fipped in caller
+            if -beta < -zw.0 && -zw.0 < -alpha {
                 self.evaluate_search(game, killer, depth, ply, alpha, beta, true)
             } else {
                 zw
@@ -130,15 +129,15 @@ impl Engine {
         let mut killer = KillerTable::new();
         let in_check = game.board().checkers().0 != 0;
 
-        if ply != 0 && !in_check && depth > 3 {
-            let game = game.make_null_move().unwrap();
-            let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let (neg_eval, _) = self.zw_search(&game, &mut killer, depth - r, ply + 1, Eval(1 - beta.0), false);
+        // if ply != 0 && !in_check && depth > 3 {
+        //     let game = game.make_null_move().unwrap();
+        //     let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
+        //     let (neg_eval, _) = self.zw_search(&game, &mut killer, depth - r, ply + 1, Eval(1 - beta.0));
 
-            if -neg_eval >= beta {
-                return (ChessMove::default(), (-neg_eval).incr_mate(), NodeType::None);
-            }
-        }
+        //     if -neg_eval >= beta {
+        //         return (ChessMove::default(), (-neg_eval).incr_mate(), NodeType::None);
+        //     }
+        // }
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
         self.order_moves(&mut moves, game, &p_killer);
@@ -149,32 +148,33 @@ impl Engine {
         for (i, m) in moves.into_iter().enumerate() {
             let game = _game.make_move(m);
 
-            let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+            // let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+            let this_depth = depth - 1;
 
             // futility pruning: kill nodes with no potential
-            if !in_check && depth <= 2 {
-                let eval = -evaluate_static(game.board());
-                let margin = 100 * depth as i16 * depth as i16  ;
+            // if !in_check && depth <= 2 {
+            //     let eval = -evaluate_static(game.board());
+            //     let margin = 100 * depth as i16 * depth as i16  ;
 
-                if eval.0 + margin < alpha.0 {
-                    if best.0 == ChessMove::default() {
-                        best = (m, Eval(eval.0 - margin));
-                    }
+            //     if eval.0 + margin < alpha.0 {
+            //         if best.0 == ChessMove::default() {
+            //             best = (m, Eval(eval.0 - margin));
+            //         }
 
-                    continue;
-                }
-            }
+            //         continue;
+            //     }
+            // }
 
             let (mut neg_eval, mut nt) = self.pvs(i == 0, &game, &mut killer, this_depth, ply + 1, -beta, -alpha, in_pv);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
-            if this_depth < depth - 1 && best.1 < -neg_eval {
-                let new = self.pvs(i == 0, &game, &mut killer, depth - 1, ply + 1, -beta, -alpha, in_pv);
+            // if this_depth < depth - 1 && best.1 < -neg_eval {
+            //     let new = self.pvs(i == 0, &game, &mut killer, depth - 1, ply + 1, -beta, -alpha, in_pv);
 
-                if !self.times_up() {
-                    (neg_eval, nt) = new;
-                }
-            }
+            //     if !self.times_up() {
+            //         (neg_eval, nt) = new;
+            //     }
+            // }
 
             let eval = -neg_eval;
 
