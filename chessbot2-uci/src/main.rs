@@ -59,20 +59,12 @@ fn main() {
                 println!("bestmove {mov}");
             },
             Some(uci::UciCommand::D) => print!("{:#}", engine.game),
+            Some(uci::UciCommand::Eval) => println!(
+                "{:#}Eval: {}",
+                engine.game,
+                evaluate_static(engine.game.board()),
+            ),
             Some(uci::UciCommand::Move(m)) => engine.game = engine.game.make_move(m),
-            Some(uci::UciCommand::See(m)) => println!("{}", chessbot2::see(&engine.game, m)),
-            Some(uci::UciCommand::Ttt(m)) => {
-                engine.allow_for(std::time::Duration::MAX);
-                best_move(debug_mode, &engine, Some(8));
-
-                for m in m.split_whitespace() {
-                    if let Ok(m) = chess::ChessMove::from_san(engine.game.board(), m) {
-                        println!(">>> {m}");
-                        engine.game = engine.game.make_move(m);
-                        best_move(debug_mode, &engine, Some(8));
-                    }
-                }
-            }
             None => println!("info string got unknown command {l}"),
         }
     }
