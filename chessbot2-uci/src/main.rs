@@ -50,21 +50,7 @@ fn main() {
                     engine.allow_for(std::time::Duration::MAX);
                 }
 
-                let (mov, ..) = engine.best_move(|engine, (best, eval, depth)| {
-                    let time = engine.elapsed();
-                    let nodes = engine.nodes();
-
-                    println!(
-                        "info score {eval:#} seldepth {depth} depth {depth} nodes {nodes} time {} nps {} pv {}",
-                        time.as_millis(),
-                        (nodes as f64 / time.as_secs_f64()) as u64,
-                        engine.find_pv(best, if debug_mode { 100 } else { 20 }).into_iter()
-                            .map(|m| m.to_string())
-                            .collect::<Vec<_>>()
-                            .join(" "),
-                    );
-                    target_depth.map_or(true, |td| td > depth)
-                });
+                let mov = best_move(debug_mode, &engine, target_depth);
                 if debug_mode {
                     // NOTE: getting the amount of tt used can be expensive, so it is only counted
                     // if in debug mode
@@ -75,7 +61,37 @@ fn main() {
             Some(uci::UciCommand::D) => print!("{:#}", engine.game),
             Some(uci::UciCommand::Move(m)) => engine.game = engine.game.make_move(m),
             Some(uci::UciCommand::See(m)) => println!("{}", chessbot2::see(&engine.game, m)),
+            Some(uci::UciCommand::Ttt(m)) => {
+                engine.allow_for(std::time::Duration::MAX);
+                best_move(debug_mode, &engine, Some(8));
+
+                for m in m.split_whitespace() {
+                    if let Ok(m) = chess::ChessMove::from_san(engine.game.board(), m) {
+                        println!(">>> {m}");
+                        engine.game = engine.game.make_move(m);
+                        best_move(debug_mode, &engine, Some(8));
+                    }
+                }
+            }
             None => println!("info string got unknown command {l}"),
         }
     }
+}
+
+fn best_move(debug_mode: bool, engine: &Engine, target_depth: Option<usize>) -> chess::ChessMove {
+    engine.best_move(|engine, (best, eval, depth)| {
+        let time = engine.elapsed();
+        let nodes = engine.nodes();
+
+        println!(
+            "info score {eval:#} seldepth {depth} depth {depth} nodes {nodes} time {} nps {} pv {}",
+            time.as_millis(),
+            (nodes as f64 / time.as_secs_f64()) as u64,
+            engine.find_pv(best, if debug_mode { 100 } else { 20 }).into_iter()
+            .map(|m| m.to_string())
+            .collect::<Vec<_>>()
+            .join(" "),
+        );
+        target_depth.map_or(true, |td| td > depth)
+    }).0
 }

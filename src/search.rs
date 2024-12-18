@@ -12,14 +12,14 @@ impl Engine {
         let prev = self._evaluate_search(&self.game, &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
-        if !cont(self, prev.clone()) || prev.1.is_positive_mate() { return prev };
+        if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
             let this = self._evaluate_search(&self.game, &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
-            if !cont(self, prev.clone()) || prev.1.is_positive_mate() { break };
+            if !cont(self, prev.clone()) { break };
         }
 
         prev
@@ -51,7 +51,7 @@ impl Engine {
     ) -> (Eval, NodeType) {
         let (next, eval, nt) = self._evaluate_search(game, killer, depth, ply, alpha, beta, in_zw);
 
-        if nt != NodeType::None && !eval.is_mate() && !self.times_up() {
+        if nt != NodeType::None && !self.times_up() {
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
                 depth: depth as u8,
                 eval,

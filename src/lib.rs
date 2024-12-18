@@ -1,6 +1,7 @@
-pub use eval::Eval;
+pub use eval::{Eval, evaluate_static};
 pub use game::Game;
 pub use see::see;
+
 use std::time::*;
 use std::sync::{atomic::*, RwLock};
 
