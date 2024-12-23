@@ -34,7 +34,11 @@ impl Engine {
         ply: usize,
         beta: Eval,
     ) -> (Eval, NodeType) {
-        self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, false)
+        if beta > Eval::MIN {
+            self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, false)
+        } else {
+            self.evaluate_search(game, killer, depth, ply, beta, Eval(beta.0 + 1), false)
+        }
     }
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
@@ -80,7 +84,7 @@ impl Engine {
             let zw = self.zw_search(game, killer, depth, ply, beta);
 
             // NOTE: params fipped in caller
-            if -beta < -zw.0 && -zw.0 < -alpha {
+            if false&& -beta < -zw.0 && -zw.0 < -alpha {
                 self.evaluate_search(game, killer, depth, ply, alpha, beta, true)
             } else {
                 zw
