@@ -15,7 +15,7 @@ impl KillerTable {
     }
 }
 
-impl crate::Engine {
+impl crate::SmpThread<'_> {
     pub(crate) fn order_moves(&self, moves: &mut [ChessMove], game: &Game, killer: &KillerTable) {
         // we order moves with the following order:
         // 1. good hash moves
@@ -24,16 +24,13 @@ impl crate::Engine {
         // 4. by killer heuristic
         // 5. bad MVV-LVA moves
 
+        let hash = self.trans_table.get(game.board().get_hash());
+
         moves.sort_unstable_by(|a, b| {
-            self.cmp_hash(game, *a, *b)
+            hash.map_or(Ordering::Equal, |e| (*b == e.next).cmp(&(*a == e.next)))
                 .then_with(|| mvv_lva(game, *a, *b))
                 .then_with(|| self.killer_heuristic(killer, *a, *b))
         });
-    }
-
-    fn cmp_hash(&self, game: &Game, a: ChessMove, b: ChessMove) -> Ordering {
-        self.trans_table.get(game.board().get_hash())
-            .map_or(Ordering::Equal, |e| (b == e.next).cmp(&(a == e.next)))
     }
 
     fn killer_heuristic(&self, killer: &KillerTable, a: ChessMove, b: ChessMove) -> Ordering {

@@ -11,6 +11,7 @@ fn main() {
     let mut lines = std::io::stdin().lock().lines();
 
     let mut engine = Engine::new(Game::new(chess::Board::default()), DEFAULT_HASH_SIZE_MB * 1024 * 1024);
+    engine.start_smp(3);
     let mut debug_mode = false;
 
     while let Some(Ok(l)) = lines.next() {
@@ -30,14 +31,15 @@ fn main() {
             Some(uci::UciCommand::IsReady) => println!("readyok"),
             Some(uci::UciCommand::Quit) => std::process::exit(0),
             Some(uci::UciCommand::UciNewGame) => {},
-            Some(uci::UciCommand::Position { position, moves }) => {
-                engine.game = position;
+            Some(uci::UciCommand::Position { mut position, moves }) => {
                 for m in moves {
-                    engine.game = engine.game.make_move(m);
+                    position = position.make_move(m);
                 }
+
+                *engine.game.write().unwrap() = position;
             },
             Some(uci::UciCommand::Go { depth: target_depth, movetime, wtime, btime }) => {
-                let tc = if matches!(engine.game.board().side_to_move(), chess::Color::White) {
+                let tc = if matches!(engine.game.read().unwrap().board().side_to_move(), chess::Color::White) {
                     wtime
                 } else {
                     btime
@@ -58,13 +60,13 @@ fn main() {
                 }
                 println!("bestmove {mov}");
             },
-            Some(uci::UciCommand::D) => print!("{:#}", engine.game),
+            Some(uci::UciCommand::D) => print!("{:#}", engine.game.read().unwrap()),
             Some(uci::UciCommand::Eval) => println!(
                 "{:#}Eval: {}",
-                engine.game,
-                evaluate_static(engine.game.board()),
+                engine.game.read().unwrap(),
+                evaluate_static(engine.game.read().unwrap().board()),
             ),
-            Some(uci::UciCommand::Move(m)) => engine.game = engine.game.make_move(m),
+            Some(uci::UciCommand::Move(m)) => *engine.game.write().unwrap() = engine.game.read().unwrap().make_move(m),
             None => println!("info string got unknown command {l}"),
         }
     }

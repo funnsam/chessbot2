@@ -14,21 +14,42 @@ mod shared_table;
 mod trans_table;
 
 pub struct Engine {
-    pub game: Game,
+    pub game: RwLock<Game>,
     trans_table: trans_table::TransTable,
 
     time_ref: RwLock<Instant>,
     time_usable: RwLock<Duration>,
     can_time_out: AtomicBool,
 
-    nodes_searched: core::sync::atomic::AtomicUsize,
-    // search_done: AtomicBool,
+    nodes_searched: AtomicUsize,
+
+    smp_start: AtomicUsize,
+    smp_abort: AtomicBool,
+    smp_exit:  AtomicBool,
+    smp_alive: AtomicUsize,
+    smp_count: usize,
+}
+
+pub(crate) struct SmpThread<'a> {
+    game: &'a RwLock<Game>,
+
+    trans_table: &'a trans_table::TransTable,
+    nodes_searched: &'a AtomicUsize,
+
+    index: usize,
+
+    /// Non-zero value signals start of depth of specified value
+    start: &'a AtomicUsize,
+    abort: &'a AtomicBool,
+    exit:  &'a AtomicBool,
+    /// Decrement when thread killed
+    alive: &'a AtomicUsize,
 }
 
 impl Engine {
     pub fn new(game: Game, hash_size_bytes: usize) -> Self {
         Self {
-            game,
+            game: RwLock::new(game),
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
 
             time_ref: Instant::now().into(),
@@ -36,26 +57,42 @@ impl Engine {
             can_time_out: AtomicBool::new(true),
 
             nodes_searched: AtomicUsize::new(0),
-            // search_done: AtomicBool::new(false),
+
+            smp_start: AtomicUsize::new(0),
+            smp_abort: AtomicBool::new(false),
+            smp_exit:  AtomicBool::new(false),
+            smp_alive: AtomicUsize::new(0),
+            smp_count: 0,
         }
     }
 
-    // pub fn ponder(self: Arc<Self>) {
-    //     self.allow_for(Duration::ZERO);
-    //     self.can_time_out.store(false, Ordering::Relaxed);
+    pub fn start_smp(&mut self, smp_count: usize) {
+        assert_eq!(self.smp_count, 0);
 
-    //     {
-    //         let engine = Arc::clone(&self);
-    //         std::thread::spawn(move || {
-    //             engine.best_move(|_, _| true);
-    //         });
-    //     }
-    // }
+        self.smp_count = smp_count;
+        self.smp_alive.store(smp_count, Ordering::Relaxed);
 
-    // pub fn stop_ponder(&self) {
-    //     self.can_time_out.store(true, Ordering::Relaxed);
-    //     while !self.search_done.load(Ordering::Relaxed) {}
-    // }
+        for index in 0..smp_count {
+            // SAFETY: `Engine` checks that no threads are alive when exiting
+            let s = unsafe { core::mem::transmute::<_, &'static Self>(&*self) };
+
+            std::thread::spawn(move || {
+                SmpThread {
+                    game: &s.game,
+
+                    trans_table: &s.trans_table,
+                    nodes_searched: &s.nodes_searched,
+
+                    index,
+
+                    start: &s.smp_start,
+                    abort: &s.smp_abort,
+                    exit: &s.smp_exit,
+                    alive: &s.smp_alive,
+                }.start();
+            });
+        }
+    }
 
     pub fn resize_hash(&mut self, hash_size_bytes: usize) {
         self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
@@ -91,7 +128,7 @@ impl Engine {
         let mut pv = Vec::with_capacity(max);
         pv.push(best);
 
-        let mut game = self.game.make_move(best);
+        let mut game = self.game.read().unwrap().make_move(best);
         while let Some(tte) = self.trans_table.get(game.board().get_hash()) {
             if tte.next == ChessMove::default() { break }
 
@@ -116,6 +153,20 @@ impl Engine {
 
     pub fn tt_used(&self) -> usize {
         self.trans_table.filter_count(|e| e.node_type != trans_table::NodeType::None)
+    }
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        self.smp_abort.store(true, Ordering::Relaxed);
+        self.smp_exit.store(true, Ordering::Relaxed);
+        while self.smp_alive.load(Ordering::Relaxed) != 0 {}
+    }
+}
+
+impl Drop for SmpThread<'_> {
+    fn drop(&mut self) {
+        self.alive.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
