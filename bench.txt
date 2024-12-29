@@ -1,0 +1,11 @@
+0 helper threads: 239.59ms
+1 helper threads: 228.50ms
+2 helper threads: 235.97ms
+3 helper threads: 200.12ms
+4 helper threads: 215.81ms
+5 helper threads: 236.31ms
+6 helper threads: 240.00ms
+7 helper threads: 327.25ms 
+    276.25ms - 308.44ms when depth = start + index / 4
+    309.25ms when ^ and swap after sort normal
+    408.66ms when depth = start + index / 4 and sort best then random

@@ -12,7 +12,7 @@ fn main() {
     let mut lines = std::io::stdin().lock().lines();
 
     let mut engine = Engine::new(Game::new(chess::Board::default()), DEFAULT_HASH_SIZE_MB * MB);
-    engine.start_smp(3);
+    engine.start_smp(7);
     let mut debug_mode = false;
 
     while let Some(Ok(l)) = lines.next() {

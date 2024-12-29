@@ -46,6 +46,8 @@ pub(crate) struct SmpThread<'a> {
     alive: &'a AtomicUsize,
 
     thread_abort: usize,
+
+    rng: fastrand::Rng,
 }
 
 impl Engine {
@@ -93,6 +95,8 @@ impl Engine {
                     alive: &s.smp_alive,
 
                     thread_abort: 1,
+
+                    rng: fastrand::Rng::with_seed(index as _)
                 }.start();
             });
         }
@@ -182,4 +186,10 @@ impl Drop for SmpThread<'_> {
 pub struct TimeControl {
     pub time_left: usize,
     pub time_incr: usize,
+}
+
+pub(crate) fn hash<T: core::hash::Hash + ?Sized>(v: &T) -> u64 {
+    let mut state = rustc_hash::FxHasher::default();
+    v.hash(&mut state);
+    core::hash::Hasher::finish(&state)
 }

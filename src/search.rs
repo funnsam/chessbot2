@@ -8,7 +8,7 @@ impl Engine {
         *self.time_ref.write().unwrap() = Instant::now();
         self.nodes_searched.store(0, Ordering::Relaxed);
 
-        let main_thread = SmpThread {
+        let mut main_thread = SmpThread {
             game: &self.game,
 
             trans_table: &self.trans_table,
@@ -22,6 +22,8 @@ impl Engine {
             alive: &AtomicUsize::new(1),
 
             thread_abort: 0,
+
+            rng: fastrand::Rng::with_seed(0xdeadbeef),
         };
         let prev = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
@@ -42,10 +44,15 @@ impl Engine {
 impl SmpThread<'_> {
     pub fn start(mut self) {
         while !self.exit.load(Ordering::Relaxed) {
-            let depth = self.start.load(Ordering::Relaxed);
+            let start = self.start.load(Ordering::Relaxed);
 
-            if depth != 0 && !self.abort() {
+            if start != 0 && !self.abort() {
+                let depth = start + self.index / 5;
+
+                // println!("thread {} depth {depth}", self.index);
                 self.evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+                // println!("thread {} depth {depth} end", self.index);
+
                 self.thread_abort += 1;
             }
         }
@@ -57,7 +64,7 @@ impl SmpThread<'_> {
 
     #[inline]
     fn zw_search(
-        &self,
+        &mut self,
         game: &Game,
         killer: &mut KillerTable,
         depth: usize,
@@ -70,7 +77,7 @@ impl SmpThread<'_> {
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
     #[inline]
     fn evaluate_search(
-        &self,
+        &mut self,
         game: &Game,
         killer: &mut KillerTable,
         depth: usize,
@@ -94,7 +101,7 @@ impl SmpThread<'_> {
     }
 
     fn _evaluate_search(
-        &self,
+        &mut self,
         game: &Game,
         p_killer: &mut KillerTable,
         depth: usize,
