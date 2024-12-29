@@ -19,7 +19,7 @@ impl crate::SmpThread<'_> {
     pub(crate) fn order_moves(&mut self, moves: &mut [ChessMove], game: &Game, killer: &KillerTable) {
         let tte = self.trans_table.get(game.board().get_hash());
 
-        if self.thread_abort == 0 {
+        // if self.thread_abort == 0 {
             // we order moves in the main search with the following order:
             // 1. good hash moves
             // 2. bad hash moves
@@ -32,7 +32,7 @@ impl crate::SmpThread<'_> {
                     .then_with(|| mvv_lva(game, *a, *b))
                     .then_with(|| self.killer_heuristic(killer, *a, *b))
             });
-        } else {
+        /*} else {
             // for non-main threads, we want hash moves and then random moves
             if let Some(tte) = tte {
                 if let Some(best_i) = moves.iter().position(|i| *i == tte.next) {
@@ -49,7 +49,7 @@ impl crate::SmpThread<'_> {
             //         .then_with(|| self.killer_heuristic(killer, *a, *b))
             // });
             // moves.swap(0, self.index % moves.len());
-        }
+        }*/
     }
 
     fn killer_heuristic(&self, killer: &KillerTable, a: ChessMove, b: ChessMove) -> Ordering {
