@@ -4,7 +4,7 @@ use chess::{BoardStatus, ChessMove, MoveGen};
 use move_order::KillerTable;
 
 impl Engine {
-    pub fn best_move<F: Fn(&Self, (ChessMove, Eval, usize)) -> bool>(&self, cont: F) -> (ChessMove, Eval, usize) {
+    pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
         *self.time_ref.write().unwrap() = Instant::now();
         self.nodes_searched.store(0, Ordering::Relaxed);
 
@@ -23,15 +23,15 @@ impl Engine {
         };
         let prev = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
-        cont(self, prev);
+        if !cont(self, prev) { return prev };
 
         for depth in 2..=255 {
             self.smp_start.store(depth, Ordering::Relaxed);
             self.smp_abort.store(false, Ordering::Relaxed);
             let this = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
             prev = (this.0, this.1, depth);
-            cont(self, prev);
             self.smp_abort.store(true, Ordering::Relaxed);
+            if !cont(self, prev) { break };
         }
 
         prev
