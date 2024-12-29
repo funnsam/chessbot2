@@ -27,11 +27,11 @@
 ```
 input (i16×16) → _mm256_madd_epi16 (i32×8)       ┐
          weights (i16×16) ↑  └→ _mm256_add_epi32 ┘ ×8
-_mm256_cvtsepi32_epi16 (i16×8) ← acc ←┘
+_mm256_packs_epi32 (i16×16) ← acc ←┘
   ↓
-_mm_madd_epi16 (i32×4) → normal add → i32 → i16
+_mm256_madd_epi16 (i32×8) → hadds abuse
   ↑
-weights (i16×8)
+weights (i16×16)
 ```
 
 ## AVX
@@ -55,62 +55,4 @@ input (i16×8) → vget_low_s16 (i16×4) → vmull_s16 (i32×4) ┐      ┐
 vqmovn_s32 (i16×4) ← acc ←┘                                     │
  └→ vmull_s16 (i32×4) ← weights (i16×4)                         ┘
         └→ normal add → i32 → i16
-```
-
-# Backprop
-C = cost
-a = activation
-z = pre activation
-y = desired
-w = weight
-b = bias
-
-```
-y
-↓
-C ← a₃ ← z₃ ← w₃,₀,₀ a₂,₀
-         ↑    w₃,₁,₀ a₂,₁
-         b₃   …
-
-a₂,₀ ← z₂,₀ ← w₂,₀,₀ a₁,₀
-        ↑     w₂,₁,₀ a₁,₁
-       b₂,₀   …
-
-a₂,₁ ← z₂,₁ ← w₂,₀,₁ a₁,₀
-        ↑     w₂,₁,₁ a₁,₁
-       b₂,₁   …      ^^^^- affects multiple paths
-```
-
-## Activation a₁,₀
-```
- ∂C     i  ∂z₂,ᵢ ∂a₂,ᵢ  ∂C
-───── = Σ  ───── ───── ─────
-∂a₁,₀   n₂ ∂a₁,₀ ∂z₂,ᵢ ∂a₂,ᵢ
-
-∂z₂,ᵢ
-───── = w₂,₀,ᵢ
-∂a₁,₀
-
-∂a₂,ᵢ
-───── = ReLU'(∂z₂,ᵢ)
-∂z₂,ᵢ
-```
-
-## Activation a₂,₀
-```
- ∂C      ∂z₃  ∂a₃ ∂C
-───── = ───── ─── ───
-∂a₂,₀   ∂a₂,₀ ∂z₃ ∂a₃
-
- ∂z₃
-───── = w₃,₀,₀
-∂a₂,₀
-
-∂a₃
-─── = 1
-∂z₃
-
-∂C
-─── = 2(a₃ - y)
-∂a₃
 ```

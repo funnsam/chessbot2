@@ -1,3 +1,12 @@
+pub type Nnue = NnueImpl;
+pub type Accumulator = AccumulatorImpl;
+
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+mod x86_64_avx2;
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+use x86_64_avx2::*;
+
+/*
 pub struct Nnue {
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
     weight_l1: [[core::arch::aarch64::int16x8_t; 2]; 8],
@@ -44,4 +53,4 @@ pub struct Accumulator {
         all(target_arch = "aarch64", target_feature = "neon")
     )))]
     fallback: [i16; 16],
-}
+}*/
