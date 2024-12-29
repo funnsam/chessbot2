@@ -74,7 +74,7 @@ fn main() {
                 let mut _time = 0;
 
                 for _ in 0..ITERS {
-                    engine.resize_hash(DEFAULT_HASH_SIZE_MB * MB);
+                    engine.clear_hash();
 
                     engine.best_move(|engine, (best, eval, depth)| {
                         let time = engine.elapsed();

@@ -24,7 +24,7 @@ pub struct Engine {
     nodes_searched: AtomicUsize,
 
     smp_start: AtomicUsize,
-    smp_abort: AtomicBool,
+    smp_abort: AtomicUsize,
     smp_exit:  AtomicBool,
     smp_alive: AtomicUsize,
     smp_count: usize,
@@ -40,10 +40,12 @@ pub(crate) struct SmpThread<'a> {
 
     /// Non-zero value signals start of depth of specified value
     start: &'a AtomicUsize,
-    abort: &'a AtomicBool,
+    abort: &'a AtomicUsize,
     exit:  &'a AtomicBool,
     /// Decrement when thread killed
     alive: &'a AtomicUsize,
+
+    thread_abort: usize,
 }
 
 impl Engine {
@@ -59,7 +61,7 @@ impl Engine {
             nodes_searched: AtomicUsize::new(0),
 
             smp_start: AtomicUsize::new(0),
-            smp_abort: AtomicBool::new(false),
+            smp_abort: AtomicUsize::new(0),
             smp_exit:  AtomicBool::new(false),
             smp_alive: AtomicUsize::new(0),
             smp_count: 0,
@@ -89,13 +91,11 @@ impl Engine {
                     abort: &s.smp_abort,
                     exit: &s.smp_exit,
                     alive: &s.smp_alive,
+
+                    thread_abort: 1,
                 }.start();
             });
         }
-    }
-
-    pub fn resize_hash(&mut self, hash_size_bytes: usize) {
-        self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
     }
 
     pub fn time_control(&self, time_ctrl: TimeControl) {
@@ -154,12 +154,20 @@ impl Engine {
     pub fn tt_used(&self) -> usize {
         self.trans_table.filter_count(|e| e.node_type != trans_table::NodeType::None)
     }
+
+    pub fn resize_hash(&mut self, hash_size_bytes: usize) {
+        self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
+    }
+
+    pub fn clear_hash(&mut self) {
+        self.trans_table.clear();
+    }
 }
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        self.smp_abort.store(true, Ordering::Relaxed);
         self.smp_exit.store(true, Ordering::Relaxed);
+        self.smp_abort.store(usize::MAX, Ordering::Relaxed);
         while self.smp_alive.load(Ordering::Relaxed) != 0 {}
     }
 }

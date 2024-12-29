@@ -17,9 +17,11 @@ impl Engine {
             index: 0,
 
             start: &AtomicUsize::new(1),
-            abort: &AtomicBool::new(false),
+            abort: &AtomicUsize::new(0),
             exit:  &AtomicBool::new(false),
             alive: &AtomicUsize::new(1),
+
+            thread_abort: 0,
         };
         let prev = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
@@ -27,10 +29,9 @@ impl Engine {
 
         for depth in 2..=255 {
             self.smp_start.store(depth, Ordering::Relaxed);
-            self.smp_abort.store(false, Ordering::Relaxed);
+            self.smp_abort.fetch_add(1, Ordering::Relaxed);
             let this = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
             prev = (this.0, this.1, depth);
-            self.smp_abort.store(true, Ordering::Relaxed);
             if !cont(self, prev) { break };
         }
 
@@ -39,20 +40,19 @@ impl Engine {
 }
 
 impl SmpThread<'_> {
-    pub fn start(self) {
+    pub fn start(mut self) {
         while !self.exit.load(Ordering::Relaxed) {
-            let start = self.start.load(Ordering::Relaxed);
+            let depth = self.start.load(Ordering::Relaxed);
 
-            if start != 0 && !self.abort() {
-                let depth = start + self.index;
-
+            if depth != 0 && !self.abort() {
                 self.evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+                self.thread_abort += 1;
             }
         }
     }
 
     fn abort(&self) -> bool {
-        self.abort.load(Ordering::Relaxed)
+        self.abort.load(Ordering::Relaxed) != self.thread_abort
     }
 
     #[inline]
