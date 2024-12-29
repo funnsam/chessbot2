@@ -11,6 +11,12 @@ impl ButterflyTable {
         Self(core::array::from_fn(|_| AtomicUsize::new(0)))
     }
 
+    pub fn clear(&self) {
+        for i in self.0.iter() {
+            i.store(0, AtomOrd::Relaxed);
+        }
+    }
+
     pub fn update(&self, m: ChessMove, depth: usize) {
         self.0[m.get_source().to_index() * 64 + m.get_dest().to_index()].fetch_add(depth * depth, AtomOrd::Relaxed);
     }

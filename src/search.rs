@@ -7,6 +7,7 @@ impl Engine {
     pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
         *self.time_ref.write().unwrap() = Instant::now();
         self.nodes_searched.store(0, Ordering::Relaxed);
+        self.hist_table.clear();
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
         let prev = self._evaluate_search(&self.game, &ButterflyTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
