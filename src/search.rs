@@ -1,7 +1,7 @@
 use core::sync::atomic::Ordering;
 use crate::{*, eval::*, trans_table::*};
 use chess::{BoardStatus, ChessMove, MoveGen};
-use move_order::KillerTable;
+use move_order::ButterflyTable;
 
 impl Engine {
     pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
@@ -9,13 +9,13 @@ impl Engine {
         self.nodes_searched.store(0, Ordering::Relaxed);
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self._evaluate_search(&self.game, &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
+        let prev = self._evaluate_search(&self.game, &ButterflyTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
         if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
-            let this = self._evaluate_search(&self.game, &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+            let this = self._evaluate_search(&self.game, &ButterflyTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -29,7 +29,7 @@ impl Engine {
     fn zw_search(
         &self,
         game: &Game,
-        killer: &mut KillerTable,
+        killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         beta: Eval,
@@ -42,7 +42,7 @@ impl Engine {
     fn evaluate_search(
         &self,
         game: &Game,
-        killer: &mut KillerTable,
+        killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         alpha: Eval,
@@ -66,7 +66,7 @@ impl Engine {
     fn _evaluate_search(
         &self,
         game: &Game,
-        p_killer: &mut KillerTable,
+        p_killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         mut alpha: Eval,
@@ -101,13 +101,13 @@ impl Engine {
             return (ChessMove::default(), self.quiescence_search(game, alpha, beta), NodeType::Exact);
         }
 
-        let mut killer = KillerTable::new();
+        let killer = ButterflyTable::new();
         let in_check = game.board().checkers().0 != 0;
 
         if ply != 0 && !in_check && depth > 3 && !in_zw {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let (neg_eval, _) = self.zw_search(&game, &mut killer, depth - r, ply + 1, Eval(1 - beta.0));
+            let (neg_eval, _) = self.zw_search(&game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
 
             if -neg_eval >= beta {
                 return (ChessMove::default(), (-neg_eval).incr_mate(), NodeType::None);
@@ -139,11 +139,11 @@ impl Engine {
                 }
             }
 
-            let (mut neg_eval, mut nt) = self.evaluate_search(&game, &mut killer, this_depth, ply + 1, -beta, -alpha, in_zw);
+            let (mut neg_eval, mut nt) = self.evaluate_search(&game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
             if this_depth < depth - 1 && best.1 < -neg_eval {
-                let new = self.evaluate_search(&game, &mut killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
+                let new = self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
 
                 if !self.times_up() {
                     (neg_eval, nt) = new;
@@ -157,7 +157,11 @@ impl Engine {
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                if _game.board().piece_on(m.get_dest()).is_none() { p_killer.update(m, depth); };
+                if _game.board().piece_on(m.get_dest()).is_none() {
+                    p_killer.update(m, depth);
+                    self.hist_table.update(m, depth);
+                }
+
                 return (best.0, best.1.incr_mate(), NodeType::LowerBound);
             }
         }

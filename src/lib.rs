@@ -16,6 +16,7 @@ mod trans_table;
 pub struct Engine {
     pub game: Game,
     trans_table: trans_table::TransTable,
+    hist_table: move_order::ButterflyTable,
 
     time_ref: RwLock<Instant>,
     time_usable: RwLock<Duration>,
@@ -30,6 +31,7 @@ impl Engine {
         Self {
             game,
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
+            hist_table: move_order::ButterflyTable::new(),
 
             time_ref: Instant::now().into(),
             time_usable: Duration::default().into(),
