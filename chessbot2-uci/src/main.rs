@@ -1,5 +1,6 @@
 #![feature(str_split_whitespace_remainder)]
 
+use core::usize::MAX as USIZE_MAX;
 use std::io::BufRead;
 use chessbot2::*;
 
@@ -12,7 +13,7 @@ fn main() {
     let mut lines = std::io::stdin().lock().lines();
 
     let mut engine = Engine::new(Game::new(chess::Board::default()), DEFAULT_HASH_SIZE_MB * MB);
-    engine.start_smp(7);
+    engine.start_smp(0);
     let mut debug_mode = false;
 
     while let Some(Ok(l)) = lines.next() {
@@ -21,11 +22,16 @@ fn main() {
             Some(uci::UciCommand::Uci) => {
                 println!("id name funn's bot");
                 println!("id author funnsam");
-                println!("option name Hash type spin default {DEFAULT_HASH_SIZE_MB} min 0 max 16384");
+                println!("option name Hash type spin default {DEFAULT_HASH_SIZE_MB} min 0 max {USIZE_MAX}");
+                println!("option name Threads type spin default 1 min 1 max {USIZE_MAX}");
                 println!("uciok");
             },
             Some(uci::UciCommand::SetOption(name, value)) => match name.to_ascii_lowercase().as_str() {
                 "hash" => engine.resize_hash(value.unwrap().parse::<usize>().unwrap() * MB),
+                "threads" => {
+                    engine.kill_smp();
+                    engine.start_smp(value.unwrap().parse::<usize>().unwrap() - 1);
+                },
                 _ => println!("info string got invalid setoption option"),
             },
             Some(uci::UciCommand::Debug(d)) => debug_mode = d,
@@ -69,36 +75,45 @@ fn main() {
             ),
             Some(uci::UciCommand::Move(m)) => *engine.game.write().unwrap() = engine.game.read().unwrap().make_move(m),
             Some(uci::UciCommand::Bench) => {
-                const ITERS: usize = 32;
+                let mut threads_to_ms = [0.0; 8];
 
-                let mut _time = 0;
+                for (i, rec) in threads_to_ms.iter_mut().enumerate() {
+                    engine.kill_smp();
+                    engine.start_smp(i);
 
-                engine.allow_for(std::time::Duration::MAX);
-                for _ in 0..ITERS {
-                    engine.clear_hash();
+                    const ITERS: usize = 32;
 
-                    engine.best_move(|engine, (best, eval, depth)| {
-                        let time = engine.elapsed();
-                        let nodes = engine.nodes();
+                    let mut _time = 0;
 
-                        if depth == 8 {
-                            _time += time.as_millis();
-                        }
+                    engine.allow_for(std::time::Duration::MAX);
+                    for _ in 0..ITERS {
+                        engine.clear_hash();
 
-                        println!(
-                            "info score {eval:#} seldepth {depth} depth {depth} nodes {nodes} time {} nps {} pv {}",
-                            time.as_millis(),
-                            (nodes as f64 / time.as_secs_f64()) as u64,
-                            engine.find_pv(best, if debug_mode { 100 } else { 20 }).into_iter()
-                            .map(|m| m.to_string())
-                            .collect::<Vec<_>>()
-                            .join(" "),
-                        );
-                        8 > depth
-                    });
+                        engine.best_move(|engine, (best, eval, depth)| {
+                            let time = engine.elapsed();
+                            let nodes = engine.nodes();
+
+                            if depth == 8 {
+                                _time += time.as_millis();
+                            }
+
+                            println!(
+                                "info score {eval:#} seldepth {depth} depth {depth} nodes {nodes} time {} nps {} pv {}",
+                                time.as_millis(),
+                                (nodes as f64 / time.as_secs_f64()) as u64,
+                                engine.find_pv(best, if debug_mode { 100 } else { 20 }).into_iter()
+                                .map(|m| m.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                            );
+                            8 > depth
+                        });
+                    }
+
+                    *rec = _time as f32 / ITERS as f32;
                 }
 
-                println!("depth 8 avg: {:.2}ms", _time as f32 / ITERS as f32);
+                println!("{threads_to_ms:?}");
             },
             None => println!("info string got unknown command {l}"),
         }

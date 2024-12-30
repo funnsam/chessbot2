@@ -1,24 +1,31 @@
 use core::cmp::*;
 use crate::{hash, Game};
-use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
+use core::cell::UnsafeCell;
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
-pub struct ButterflyTable(pub [AtomicUsize; 64 * 64]);
+pub struct ButterflyTable(UnsafeCell<[usize; 64 * 64]>);
+
+impl Clone for ButterflyTable {
+    fn clone(&self) -> Self {
+        unsafe { Self(UnsafeCell::new((*self.0.get()).clone())) }
+    }
+}
+
+// SAFETY: we don't really care much about race conditions
+unsafe impl Sync for ButterflyTable {}
 
 impl ButterflyTable {
     pub fn new() -> Self {
-        Self(core::array::from_fn(|_| AtomicUsize::new(0)))
+        Self(UnsafeCell::new([0; 64 * 64]))
     }
 
     pub fn clear(&self) {
-        for i in self.0.iter() {
-            i.store(0, AtomOrd::Relaxed);
-        }
+        unsafe { (*self.0.get()).fill(0) }
     }
 
     pub fn update(&self, m: ChessMove, depth: usize) {
-        self.0[m.get_source().to_index() * 64 + m.get_dest().to_index()].fetch_add(depth * depth, AtomOrd::Relaxed);
+        unsafe { (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()] += depth * depth };
     }
 }
 
@@ -34,10 +41,11 @@ impl crate::SmpThread<'_> {
             // 4. by killer heuristic
             // 5. bad MVV-LVA moves
 
+            // let hist_table = self.hist_table.clone();
             moves.sort_unstable_by(|a, b| {
                 tte.map_or(Ordering::Equal, |e| (*b == e.next).cmp(&(*a == e.next)))
                     .then_with(|| mvv_lva(game, *a, *b))
-                    .then_with(|| self.butterfly_heuristic(&self.hist_table, *a, *b))
+                    // .then_with(|| self.butterfly_heuristic(&hist_table, *a, *b))
                     .then_with(|| self.butterfly_heuristic(killer, *a, *b))
             });
         /*} else {
@@ -61,8 +69,8 @@ impl crate::SmpThread<'_> {
     }
 
     fn butterfly_heuristic(&self, bft: &ButterflyTable, a: ChessMove, b: ChessMove) -> Ordering {
-        let value = |m: ChessMove| {
-            bft.0[m.get_source().to_index() * 64 + m.get_dest().to_index()].load(AtomOrd::Relaxed)
+        let value = |m: ChessMove| unsafe {
+            (*bft.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
         };
 
         value(b).cmp(&value(a))

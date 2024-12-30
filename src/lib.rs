@@ -75,6 +75,17 @@ impl Engine {
         }
     }
 
+    pub fn kill_smp(&mut self) {
+        self.smp_start.store(0, Ordering::Relaxed);
+        self.smp_exit.store(true, Ordering::Relaxed);
+        self.smp_abort.store(usize::MAX, Ordering::Relaxed);
+        while self.smp_alive.load(Ordering::Relaxed) != 0 {}
+
+        self.smp_count = 0;
+        self.smp_exit.store(false, Ordering::Relaxed);
+        self.smp_abort.store(0, Ordering::Relaxed);
+    }
+
     pub fn start_smp(&mut self, smp_count: usize) {
         assert_eq!(self.smp_count, 0);
 
@@ -176,9 +187,7 @@ impl Engine {
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        self.smp_exit.store(true, Ordering::Relaxed);
-        self.smp_abort.store(usize::MAX, Ordering::Relaxed);
-        while self.smp_alive.load(Ordering::Relaxed) != 0 {}
+        self.kill_smp();
     }
 }
 
