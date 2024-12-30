@@ -1,0 +1,8 @@
+6k1/R2r2p1/1p3p2/5b2/8/6PP/P4K2/3q2N1 w - - 0 42
+correct: #-9
+output: M17 (d6, a7a8) M163 (d7, a7d7) M20 (d8, a7a8)
+
+w        b         w        b         w         b
+a7a8 #-7 d7d8 #-12 g1e2 #-5 d1e2 #-19 f2e2 #-18 f5h3(??) +3.4
+
+(not overflow)

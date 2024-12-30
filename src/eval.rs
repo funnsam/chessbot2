@@ -3,7 +3,7 @@ use chess::*;
 /// Evaluation score in centipawns. +ve is side to move better and -ve is worse
 /// ```text
 ///    ┌┬┬─ mate in n              ┌┬┬─ mate in !n
-/// 10_000…b                    01_111…b
+/// 10_00…1b                    01_111…b
 /// -32767                      32767
 /// #-0                         #0
 /// ←──────|──────|──────|──────→
