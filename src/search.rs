@@ -164,9 +164,9 @@ impl Engine {
             }
 
             let mut eval = Eval(i16::MIN);
-            /*let needs_research;
+            let needs_research;
 
-            if can_reduce {
+            if false&&can_reduce {
                 eval = -self.zw_search(&game, &killer, this_depth, ply + 1, -alpha);
                 needs_research = alpha < eval;
             } else {
@@ -175,11 +175,11 @@ impl Engine {
 
             if needs_research {
                 eval = -self.zw_search(&game, &killer, depth - 1, ply + 1, -alpha);
-            }*/
+            }
 
-            //if in_pv && (alpha < eval || i == 0) {
+            if in_pv && (alpha < eval || i == 0) {
                 eval = -self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, true);
-            //}
+            }
             // assert_ne!(eval.0, i16::MIN);
 
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None) };
