@@ -73,6 +73,7 @@ fn main() {
 
                 let mut _time = 0;
 
+                engine.allow_for(std::time::Duration::MAX);
                 for _ in 0..ITERS {
                     engine.clear_hash();
 

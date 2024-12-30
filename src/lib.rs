@@ -16,6 +16,7 @@ mod trans_table;
 pub struct Engine {
     pub game: RwLock<Game>,
     trans_table: trans_table::TransTable,
+    hist_table: move_order::ButterflyTable,
 
     time_ref: RwLock<Instant>,
     time_usable: RwLock<Duration>,
@@ -31,9 +32,12 @@ pub struct Engine {
 }
 
 pub(crate) struct SmpThread<'a> {
+    // TODO: is this a bottleneck?
     game: &'a RwLock<Game>,
-
     trans_table: &'a trans_table::TransTable,
+    hist_table: &'a move_order::ButterflyTable,
+
+    // TODO: is this a bottleneck?
     nodes_searched: &'a AtomicUsize,
 
     index: usize,
@@ -55,6 +59,7 @@ impl Engine {
         Self {
             game: RwLock::new(game),
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
+            hist_table: move_order::ButterflyTable::new(),
 
             time_ref: Instant::now().into(),
             time_usable: Duration::default().into(),
@@ -83,8 +88,9 @@ impl Engine {
             std::thread::spawn(move || {
                 SmpThread {
                     game: &s.game,
-
                     trans_table: &s.trans_table,
+                    hist_table: &s.hist_table,
+
                     nodes_searched: &s.nodes_searched,
 
                     index,

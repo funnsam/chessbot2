@@ -1,17 +1,19 @@
 use core::sync::atomic::Ordering;
 use crate::{*, eval::*, trans_table::*};
 use chess::{BoardStatus, ChessMove, MoveGen};
-use move_order::KillerTable;
+use move_order::ButterflyTable;
 
 impl Engine {
     pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
         *self.time_ref.write().unwrap() = Instant::now();
         self.nodes_searched.store(0, Ordering::Relaxed);
+        self.hist_table.clear();
 
         let mut main_thread = SmpThread {
             game: &self.game,
-
             trans_table: &self.trans_table,
+            hist_table: &self.hist_table,
+
             nodes_searched: &self.nodes_searched,
 
             index: 0,
@@ -25,14 +27,14 @@ impl Engine {
 
             rng: fastrand::Rng::with_seed(0xdeadbeef),
         };
-        let prev = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
+        let prev = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &ButterflyTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
         if !cont(self, prev) { return prev };
 
         for depth in 2..=255 {
             self.smp_start.store(depth, Ordering::Relaxed);
             self.smp_abort.fetch_add(1, Ordering::Relaxed);
-            let this = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+            let this = main_thread._evaluate_search(&self.game.read().unwrap().clone(), &mut ButterflyTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
             prev = (this.0, this.1, depth);
             if !cont(self, prev) { break };
         }
@@ -50,7 +52,7 @@ impl SmpThread<'_> {
                 let depth = start + self.index / 5;
 
                 // println!("thread {} depth {depth}", self.index);
-                self.evaluate_search(&self.game.read().unwrap().clone(), &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+                self.evaluate_search(&self.game.read().unwrap().clone(), &mut ButterflyTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
                 // println!("thread {} depth {depth} end", self.index);
 
                 self.thread_abort += 1;
@@ -66,7 +68,7 @@ impl SmpThread<'_> {
     fn zw_search(
         &mut self,
         game: &Game,
-        killer: &mut KillerTable,
+        killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         beta: Eval,
@@ -79,7 +81,7 @@ impl SmpThread<'_> {
     fn evaluate_search(
         &mut self,
         game: &Game,
-        killer: &mut KillerTable,
+        killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         alpha: Eval,
@@ -103,7 +105,7 @@ impl SmpThread<'_> {
     fn _evaluate_search(
         &mut self,
         game: &Game,
-        p_killer: &mut KillerTable,
+        p_killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         mut alpha: Eval,
@@ -138,13 +140,13 @@ impl SmpThread<'_> {
             return (ChessMove::default(), self.quiescence_search(game, alpha, beta), NodeType::Exact);
         }
 
-        let mut killer = KillerTable::new();
+        let killer = ButterflyTable::new();
         let in_check = game.board().checkers().0 != 0;
 
         if ply != 0 && !in_check && depth > 3 && !in_zw {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let eval = -self.zw_search(&game, &mut killer, depth - r, ply + 1, Eval(1 - beta.0));
+            let eval = -self.zw_search(&game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
 
             if eval >= beta {
                 return (ChessMove::default(), eval.incr_mate(), NodeType::None);
@@ -176,11 +178,11 @@ impl SmpThread<'_> {
                 }
             }
 
-            let mut eval = -self.evaluate_search(&game, &mut killer, this_depth, ply + 1, -beta, -alpha, in_zw);
+            let mut eval = -self.evaluate_search(&game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw);
             if self.abort() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
             if this_depth < depth - 1 && best.1 < eval {
-                let new = -self.evaluate_search(&game, &mut killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
+                let new = -self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
 
                 if !self.abort() {
                     eval = -new
@@ -192,7 +194,11 @@ impl SmpThread<'_> {
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                if _game.board().piece_on(m.get_dest()).is_none() { p_killer.update(m, depth); };
+                if _game.board().piece_on(m.get_dest()).is_none() {
+                    p_killer.update(m, depth);
+                    self.hist_table.update(m, depth);
+                }
+
                 return (best.0, best.1.incr_mate(), NodeType::LowerBound);
             }
         }

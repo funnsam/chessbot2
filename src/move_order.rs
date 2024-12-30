@@ -1,22 +1,29 @@
 use core::cmp::*;
 use crate::{hash, Game};
+use core::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
-pub struct KillerTable(pub [usize; 64 * 64]);
+pub struct ButterflyTable(pub [AtomicUsize; 64 * 64]);
 
-impl KillerTable {
+impl ButterflyTable {
     pub fn new() -> Self {
-        Self([0; 64 * 64])
+        Self(core::array::from_fn(|_| AtomicUsize::new(0)))
     }
 
-    pub fn update(&mut self, m: ChessMove, depth: usize) {
-        self.0[m.get_source().to_index() * 64 + m.get_dest().to_index()] += depth * depth;
+    pub fn clear(&self) {
+        for i in self.0.iter() {
+            i.store(0, AtomOrd::Relaxed);
+        }
+    }
+
+    pub fn update(&self, m: ChessMove, depth: usize) {
+        self.0[m.get_source().to_index() * 64 + m.get_dest().to_index()].fetch_add(depth * depth, AtomOrd::Relaxed);
     }
 }
 
 impl crate::SmpThread<'_> {
-    pub(crate) fn order_moves(&mut self, moves: &mut [ChessMove], game: &Game, killer: &KillerTable) {
+    pub(crate) fn order_moves(&mut self, moves: &mut [ChessMove], game: &Game, killer: &ButterflyTable) {
         let tte = self.trans_table.get(game.board().get_hash());
 
         // if self.thread_abort == 0 {
@@ -30,7 +37,8 @@ impl crate::SmpThread<'_> {
             moves.sort_unstable_by(|a, b| {
                 tte.map_or(Ordering::Equal, |e| (*b == e.next).cmp(&(*a == e.next)))
                     .then_with(|| mvv_lva(game, *a, *b))
-                    .then_with(|| self.killer_heuristic(killer, *a, *b))
+                    .then_with(|| self.butterfly_heuristic(&self.hist_table, *a, *b))
+                    .then_with(|| self.butterfly_heuristic(killer, *a, *b))
             });
         /*} else {
             // for non-main threads, we want hash moves and then random moves
@@ -52,9 +60,9 @@ impl crate::SmpThread<'_> {
         }*/
     }
 
-    fn killer_heuristic(&self, killer: &KillerTable, a: ChessMove, b: ChessMove) -> Ordering {
+    fn butterfly_heuristic(&self, bft: &ButterflyTable, a: ChessMove, b: ChessMove) -> Ordering {
         let value = |m: ChessMove| {
-            killer.0[m.get_source().to_index() * 64 + m.get_dest().to_index()]
+            bft.0[m.get_source().to_index() * 64 + m.get_dest().to_index()].load(AtomOrd::Relaxed)
         };
 
         value(b).cmp(&value(a))
