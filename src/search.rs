@@ -84,7 +84,7 @@ impl Engine {
             if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
                 || (trans.node_type == NodeType::LowerBound && eval >= beta)
                 || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
-                return (trans.next, eval.incr_mate(), NodeType::None);
+                return (trans.next, eval, NodeType::None);
             }
         }
 
