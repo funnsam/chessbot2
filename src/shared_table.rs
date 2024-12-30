@@ -1,6 +1,6 @@
 use core::cell::UnsafeCell;
+use crate::hash;
 use bytemuck::*;
-use fxhash::hash64;
 
 pub struct SharedHashTable<T: Clone + Sized + Send + Sync + NoUninit> {
     inner: Box<[UnsafeCell<TableEntry<T>>]>,
@@ -27,7 +27,7 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
     }
 
     pub fn insert(&self, key: u64, value: T) {
-        let hash = hash64(&bytemuck::bytes_of(&value));
+        let hash = hash(&bytemuck::bytes_of(&value));
         let entry = TableEntry { key, hash, value };
         unsafe { *self.inner[key as usize % self.inner.len()].get() = entry; }
     }
@@ -36,7 +36,7 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
         let entry = unsafe { (*self.inner[key as usize % self.inner.len()].get()).clone() };
         let value = entry.value;
 
-        (entry.key == key && entry.hash == hash64(&bytemuck::bytes_of(&value))).then_some(value)
+        (entry.key == key && entry.hash == hash(&bytemuck::bytes_of(&value))).then_some(value)
     }
 
     pub fn filter_count<F: Fn(T) -> bool>(&self, filter: F) -> usize {
@@ -44,7 +44,7 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
             let entry = unsafe { (*entry.get()).clone() };
             let value = entry.value;
 
-            entry.hash == hash64(&bytemuck::bytes_of(&value)) && filter(value)
+            entry.hash == hash(&bytemuck::bytes_of(&value)) && filter(value)
         }).count()
     }
 

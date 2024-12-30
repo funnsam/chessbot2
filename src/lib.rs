@@ -126,3 +126,10 @@ pub struct TimeControl {
     pub time_left: usize,
     pub time_incr: usize,
 }
+
+#[inline]
+pub(crate) fn hash<T: core::hash::Hash + ?Sized>(v: &T) -> u64 {
+    let mut state = rustc_hash::FxHasher::default();
+    v.hash(&mut state);
+    core::hash::Hasher::finish(&state)
+}
