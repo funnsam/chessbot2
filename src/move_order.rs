@@ -1,5 +1,5 @@
 use core::cmp::*;
-use crate::{hash, Game};
+use crate::Game;
 use core::cell::UnsafeCell;
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
