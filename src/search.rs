@@ -185,7 +185,7 @@ impl SmpThread<'_> {
                 let new = -self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
 
                 if !self.abort() {
-                    eval = -new
+                    eval = new;
                 }
             }
 

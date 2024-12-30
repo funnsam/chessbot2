@@ -1,14 +1,43 @@
 use core::cmp::*;
+<<<<<<< HEAD
 use crate::{hash, Game};
 use core::cell::UnsafeCell;
+=======
+use core::cell::UnsafeCell;
+use crate::Game;
+>>>>>>> main
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
 pub struct ButterflyTable(UnsafeCell<[usize; 64 * 64]>);
+<<<<<<< HEAD
 
 impl Clone for ButterflyTable {
     fn clone(&self) -> Self {
         unsafe { Self(UnsafeCell::new((*self.0.get()).clone())) }
+=======
+
+impl Clone for ButterflyTable {
+    fn clone(&self) -> Self {
+        unsafe { Self(UnsafeCell::new((*self.0.get()).clone())) }
+    }
+}
+
+// SAFETY: we don't really care much about race conditions
+unsafe impl Sync for ButterflyTable {}
+
+impl ButterflyTable {
+    pub fn new() -> Self {
+        Self(UnsafeCell::new([0; 64 * 64]))
+    }
+
+    pub fn clear(&self) {
+        unsafe { (*self.0.get()).fill(0) }
+    }
+
+    pub fn update(&self, m: ChessMove, depth: usize) {
+        unsafe { (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()] += depth * depth };
+>>>>>>> main
     }
 }
 
