@@ -76,13 +76,13 @@ impl Engine {
         beta: Eval,
         in_pv: bool,
     ) -> Eval {
-        if true||expect_pv {
+        if expect_pv {
             -self.evaluate_search(game, killer, depth, ply, -beta, -alpha, in_pv)
         } else {
             let zw = -self.zw_search(game, killer, depth, ply, -alpha);
 
-            if alpha < zw {
-                -self.evaluate_search(game, killer, depth, ply, -beta, -alpha, true)
+            if alpha < zw && zw < beta {
+                -self.evaluate_search(game, killer, depth, ply, -beta, -alpha, false)
             } else {
                 zw
             }
@@ -166,11 +166,11 @@ impl Engine {
                 }
             }
 
-            let mut eval = self.pvs(i == 0, &game, &killer, this_depth, ply + 1, alpha, beta, in_pv);
+            let mut eval = self.pvs(in_pv && i == 0, &game, &killer, this_depth, ply + 1, alpha, beta, in_pv);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
-            if this_depth < depth - 1 && best.1 < eval {
-                let new = self.pvs(i == 0, &game, &killer, depth - 1, ply + 1, alpha, beta, in_pv);
+            if in_pv && this_depth < depth - 1 && best.1 < eval {
+                let new = self.pvs(true, &game, &killer, depth - 1, ply + 1, alpha, beta, in_pv);
 
                 if !self.times_up() {
                     eval = new;
