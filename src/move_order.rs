@@ -32,9 +32,9 @@ impl ButterflyTable {
 impl crate::Engine {
     pub(crate) fn order_moves(&self, moves: &mut [ChessMove], game: &Game, killer: &ButterflyTable) {
         // we order moves with the following order:
-        // 1. good hash moves
-        // 2. bad hash moves
+        // 1. hash move
         // 3. good MVV-LVA moves
+        // 4. by history heuristic
         // 4. by killer heuristic
         // 5. bad MVV-LVA moves
 

@@ -10,13 +10,13 @@ impl Engine {
         self.hist_table.clear();
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self._evaluate_search(&self.game, &ButterflyTable::new(), 1, 0, Eval::MIN, Eval::MAX, true);
+        let prev = self.root_search(1, Eval::MIN, Eval::MAX);
         let mut prev = (prev.0, prev.1, 1);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
         if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
-            let this = self._evaluate_search(&self.game, &ButterflyTable::new(), depth, 0, Eval::MIN, Eval::MAX, true);
+            let this = self.root_search(depth, Eval::MIN, Eval::MAX);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -38,7 +38,28 @@ impl Engine {
         self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, false)
     }
 
-    /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
+    #[inline]
+    fn root_search(
+        &self,
+        depth: usize,
+        alpha: Eval,
+        beta: Eval,
+    ) -> (ChessMove, Eval) {
+        let (next, eval, nt) = self._evaluate_search(&self.game, &ButterflyTable::new(), depth, 0, alpha, beta, true);
+
+        if nt != NodeType::None && !self.times_up() {
+            self.trans_table.insert(self.game.board().get_hash(), TransTableEntry {
+                depth: depth as u8,
+                eval,
+                node_type: nt,
+                next,
+            });
+        }
+
+        (next, eval)
+    }
+
+    /// Perform an alpha-beta (fail-soft) principal variation search and return the evaluation
     #[inline]
     fn evaluate_search(
         &self,
@@ -176,6 +197,7 @@ impl Engine {
                     eval = new;
                 }
             }
+            if ply==0 {println!("{m} {eval} {:?}", self.find_pv(m, 10).iter().map(|i| i.to_string()).collect::<Vec<_>>())};
 
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
