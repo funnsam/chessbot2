@@ -34,7 +34,7 @@ impl Engine {
         depth: usize,
         ply: usize,
         beta: Eval,
-    ) -> (Eval, NodeType) {
+    ) -> Eval {
         self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, true)
     }
 
@@ -49,7 +49,7 @@ impl Engine {
         alpha: Eval,
         beta: Eval,
         in_zw: bool,
-    ) -> (Eval, NodeType) {
+    ) -> Eval {
         let (next, eval, nt) = self._evaluate_search(game, killer, depth, ply, alpha, beta, in_zw);
 
         if nt != NodeType::None && !self.times_up() {
@@ -61,7 +61,7 @@ impl Engine {
             });
         }
 
-        (eval, nt)
+        eval
     }
 
     fn _evaluate_search(
@@ -108,10 +108,10 @@ impl Engine {
         if ply != 0 && !in_check && depth > 3 && !in_zw {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let (neg_eval, _) = self.zw_search(&game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
+            let eval = -self.zw_search(&game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
 
-            if -neg_eval >= beta {
-                return (ChessMove::default(), (-neg_eval).incr_mate(), NodeType::None);
+            if eval >= beta {
+                return (ChessMove::default(), eval.incr_mate(), NodeType::None);
             }
         }
 
@@ -140,18 +140,16 @@ impl Engine {
                 }
             }
 
-            let (mut neg_eval, mut nt) = self.evaluate_search(&game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw);
+            let mut eval = -self.evaluate_search(&game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
-            if this_depth < depth - 1 && best.1 < -neg_eval {
-                let new = self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
+            if this_depth < depth - 1 && best.1 < eval {
+                let new = -self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
 
                 if !self.times_up() {
-                    (neg_eval, nt) = new;
+                    eval = new;
                 }
             }
-
-            let eval = -neg_eval;
 
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
