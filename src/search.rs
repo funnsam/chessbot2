@@ -155,7 +155,7 @@ impl Engine {
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
                 let eval = -evaluate_static(game.board());
-                let margin = 100 * depth as i16 * depth as i16  ;
+                let margin = 100 * depth as i16 * depth as i16;
 
                 if eval.0 + margin < alpha.0 {
                     if best.0 == ChessMove::default() {
@@ -166,11 +166,11 @@ impl Engine {
                 }
             }
 
-            let mut eval = self.pvs(i == 0, &game, &killer, this_depth, ply, alpha, beta, in_pv);
+            let mut eval = self.pvs(i == 0, &game, &killer, this_depth, ply + 1, alpha, beta, in_pv);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
             if this_depth < depth - 1 && best.1 < eval {
-                let new = self.pvs(i == 0, &game, &killer, depth - 1, ply, alpha, beta, in_pv);
+                let new = self.pvs(i == 0, &game, &killer, depth - 1, ply + 1, alpha, beta, in_pv);
 
                 if !self.times_up() {
                     eval = new;
