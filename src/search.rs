@@ -1,21 +1,22 @@
 use core::sync::atomic::Ordering;
 use crate::{*, eval::*, trans_table::*};
 use chess::{BoardStatus, ChessMove, MoveGen};
-use move_order::KillerTable;
+use move_order::ButterflyTable;
 
 impl Engine {
-    pub fn best_move<F: Fn(&Self, (ChessMove, Eval, usize)) -> bool>(&self, cont: F) -> (ChessMove, Eval, usize) {
+    pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
         *self.time_ref.write().unwrap() = Instant::now();
         self.nodes_searched.store(0, Ordering::Relaxed);
+        self.hist_table.clear();
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self._evaluate_search(&self.game, &mut KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, true);
+        let prev = self._evaluate_search(&self.game, &ButterflyTable::new(), 1, 0, Eval::MIN, Eval::MAX, true);
         let mut prev = (prev.0, prev.1, 1);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
         if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
-            let this = self._evaluate_search(&self.game, &mut KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, true);
+            let this = self._evaluate_search(&self.game, &ButterflyTable::new(), depth, 0, Eval::MIN, Eval::MAX, true);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -29,16 +30,12 @@ impl Engine {
     fn zw_search(
         &self,
         game: &Game,
-        killer: &mut KillerTable,
+        killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         beta: Eval,
-    ) -> (Eval, NodeType) {
-        if beta > Eval::MIN {
-            self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, false)
-        } else {
-            self.evaluate_search(game, killer, depth, ply, beta, Eval(beta.0 + 1), false)
-        }
+    ) -> Eval {
+        self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, false)
     }
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
@@ -46,13 +43,13 @@ impl Engine {
     fn evaluate_search(
         &self,
         game: &Game,
-        killer: &mut KillerTable,
+        killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         alpha: Eval,
         beta: Eval,
         in_pv: bool,
-    ) -> (Eval, NodeType) {
+    ) -> Eval {
         let (next, eval, nt) = self._evaluate_search(game, killer, depth, ply, alpha, beta, in_pv);
 
         if nt != NodeType::None && !self.times_up() {
@@ -64,28 +61,28 @@ impl Engine {
             });
         }
 
-        (eval, nt)
+        eval
     }
 
+    #[inline]
     fn pvs(
         &self,
         expect_pv: bool,
         game: &Game,
-        killer: &mut KillerTable,
+        killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         alpha: Eval,
         beta: Eval,
         in_pv: bool,
-    ) -> (Eval, NodeType) {
-        if expect_pv {
-            self.evaluate_search(game, killer, depth, ply, alpha, beta, in_pv)
+    ) -> Eval {
+        if true||expect_pv {
+            -self.evaluate_search(game, killer, depth, ply, -beta, -alpha, in_pv)
         } else {
-            let zw = self.zw_search(game, killer, depth, ply, beta);
+            let zw = -self.zw_search(game, killer, depth, ply, -alpha);
 
-            // NOTE: params fipped in caller
-            if false&& -beta < -zw.0 && -zw.0 < -alpha {
-                self.evaluate_search(game, killer, depth, ply, alpha, beta, true)
+            if alpha < zw {
+                -self.evaluate_search(game, killer, depth, ply, -beta, -alpha, true)
             } else {
                 zw
             }
@@ -95,7 +92,7 @@ impl Engine {
     fn _evaluate_search(
         &self,
         game: &Game,
-        p_killer: &mut KillerTable,
+        p_killer: &ButterflyTable,
         depth: usize,
         ply: usize,
         mut alpha: Eval,
@@ -130,18 +127,18 @@ impl Engine {
             return (ChessMove::default(), self.quiescence_search(game, alpha, beta), NodeType::Exact);
         }
 
-        let mut killer = KillerTable::new();
+        let killer = ButterflyTable::new();
         let in_check = game.board().checkers().0 != 0;
 
-        // if ply != 0 && !in_check && depth > 3 {
-        //     let game = game.make_null_move().unwrap();
-        //     let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-        //     let (neg_eval, _) = self.zw_search(&game, &mut killer, depth - r, ply + 1, Eval(1 - beta.0));
+        if ply != 0 && !in_check && depth > 3 && in_pv {
+            let game = game.make_null_move().unwrap();
+            let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
+            let eval = -self.zw_search(&game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
 
-        //     if -neg_eval >= beta {
-        //         return (ChessMove::default(), (-neg_eval).incr_mate(), NodeType::None);
-        //     }
-        // }
+            if eval >= beta {
+                return (ChessMove::default(), eval.incr_mate(), NodeType::None);
+            }
+        }
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
         self.order_moves(&mut moves, game, &p_killer);
@@ -152,42 +149,44 @@ impl Engine {
         for (i, m) in moves.into_iter().enumerate() {
             let game = _game.make_move(m);
 
-            // let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
-            let this_depth = depth - 1;
+            let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+            // let this_depth = depth - 1;
 
             // futility pruning: kill nodes with no potential
-            // if !in_check && depth <= 2 {
-            //     let eval = -evaluate_static(game.board());
-            //     let margin = 100 * depth as i16 * depth as i16  ;
+            if !in_check && depth <= 2 {
+                let eval = -evaluate_static(game.board());
+                let margin = 100 * depth as i16 * depth as i16  ;
 
-            //     if eval.0 + margin < alpha.0 {
-            //         if best.0 == ChessMove::default() {
-            //             best = (m, Eval(eval.0 - margin));
-            //         }
+                if eval.0 + margin < alpha.0 {
+                    if best.0 == ChessMove::default() {
+                        best = (m, Eval(eval.0 - margin));
+                    }
 
-            //         continue;
-            //     }
-            // }
+                    continue;
+                }
+            }
 
-            let (mut neg_eval, mut nt) = self.pvs(i == 0, &game, &mut killer, this_depth, ply + 1, -beta, -alpha, in_pv);
+            let mut eval = self.pvs(i == 0, &game, &killer, this_depth, ply, alpha, beta, in_pv);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
-            // if this_depth < depth - 1 && best.1 < -neg_eval {
-            //     let new = self.pvs(i == 0, &game, &mut killer, depth - 1, ply + 1, -beta, -alpha, in_pv);
+            if this_depth < depth - 1 && best.1 < eval {
+                let new = self.pvs(i == 0, &game, &killer, depth - 1, ply, alpha, beta, in_pv);
 
-            //     if !self.times_up() {
-            //         (neg_eval, nt) = new;
-            //     }
-            // }
-
-            let eval = -neg_eval;
+                if !self.times_up() {
+                    eval = new;
+                }
+            }
 
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                if _game.board().piece_on(m.get_dest()).is_none() { p_killer.update(m, depth); };
+                if _game.board().piece_on(m.get_dest()).is_none() {
+                    p_killer.update(m, depth);
+                    self.hist_table.update(m, depth);
+                }
+
                 return (best.0, best.1.incr_mate(), NodeType::LowerBound);
             }
         }

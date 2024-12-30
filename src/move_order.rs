@@ -1,22 +1,36 @@
 use core::cmp::*;
+use core::cell::UnsafeCell;
 use crate::Game;
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
-pub struct KillerTable(pub [usize; 64 * 64]);
+pub struct ButterflyTable(UnsafeCell<[usize; 64 * 64]>);
 
-impl KillerTable {
+impl Clone for ButterflyTable {
+    fn clone(&self) -> Self {
+        unsafe { Self(UnsafeCell::new((*self.0.get()).clone())) }
+    }
+}
+
+// SAFETY: we don't really care much about race conditions
+unsafe impl Sync for ButterflyTable {}
+
+impl ButterflyTable {
     pub fn new() -> Self {
-        Self([0; 64 * 64])
+        Self(UnsafeCell::new([0; 64 * 64]))
     }
 
-    pub fn update(&mut self, m: ChessMove, depth: usize) {
-        self.0[m.get_source().to_index() * 64 + m.get_dest().to_index()] += depth * depth;
+    pub fn clear(&self) {
+        unsafe { (*self.0.get()).fill(0) }
+    }
+
+    pub fn update(&self, m: ChessMove, depth: usize) {
+        unsafe { (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()] += depth * depth };
     }
 }
 
 impl crate::Engine {
-    pub(crate) fn order_moves(&self, moves: &mut [ChessMove], game: &Game, killer: &KillerTable) {
+    pub(crate) fn order_moves(&self, moves: &mut [ChessMove], game: &Game, killer: &ButterflyTable) {
         // we order moves with the following order:
         // 1. good hash moves
         // 2. bad hash moves
@@ -27,7 +41,8 @@ impl crate::Engine {
         moves.sort_unstable_by(|a, b| {
             self.cmp_hash(game, *a, *b)
                 .then_with(|| mvv_lva(game, *a, *b))
-                .then_with(|| self.killer_heuristic(killer, *a, *b))
+                .then_with(|| self.butterfly_heuristic(&self.hist_table, *a, *b))
+                .then_with(|| self.butterfly_heuristic(killer, *a, *b))
         });
     }
 
@@ -36,9 +51,9 @@ impl crate::Engine {
             .map_or(Ordering::Equal, |e| (b == e.next).cmp(&(a == e.next)))
     }
 
-    fn killer_heuristic(&self, killer: &KillerTable, a: ChessMove, b: ChessMove) -> Ordering {
-        let value = |m: ChessMove| {
-            killer.0[m.get_source().to_index() * 64 + m.get_dest().to_index()]
+    fn butterfly_heuristic(&self, bft: &ButterflyTable, a: ChessMove, b: ChessMove) -> Ordering {
+        let value = |m: ChessMove| unsafe {
+            (*bft.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
         };
 
         value(b).cmp(&value(a))
