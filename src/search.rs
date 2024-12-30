@@ -105,6 +105,7 @@ impl Engine {
             if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
                 || (trans.node_type == NodeType::LowerBound && eval >= beta)
                 || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
+                // TODO: maybe not incr?
                 return (trans.next, eval.incr_mate(), NodeType::None);
             }
         }
@@ -162,17 +163,24 @@ impl Engine {
                 }
             }
 
-            let mut eval;
+            let mut eval = Eval(i16::MIN);
+            /*let needs_research;
 
-            if in_pv && i == 0 {
-                eval = -self.evaluate_search(&game, &killer, this_depth, ply + 1, -beta, -alpha, in_pv);
-            } else {
+            if can_reduce {
                 eval = -self.zw_search(&game, &killer, this_depth, ply + 1, -alpha);
-
-                if alpha < eval && eval < beta && in_pv {
-                    eval = -self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, true);
-                }
+                needs_research = alpha < eval;
+            } else {
+                needs_research = !in_pv || i != 0;
             }
+
+            if needs_research {
+                eval = -self.zw_search(&game, &killer, depth - 1, ply + 1, -alpha);
+            }*/
+
+            //if in_pv && (alpha < eval || i == 0) {
+                eval = -self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, true);
+            //}
+            // assert_ne!(eval.0, i16::MIN);
 
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None) };
 
