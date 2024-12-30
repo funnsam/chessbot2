@@ -27,18 +27,6 @@ impl Engine {
     }
 
     #[inline]
-    fn zw_search(
-        &self,
-        game: &Game,
-        killer: &ButterflyTable,
-        depth: usize,
-        ply: usize,
-        beta: Eval,
-    ) -> Eval {
-        self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, false)
-    }
-
-    #[inline]
     fn root_search(
         &self,
         depth: usize,
@@ -57,6 +45,18 @@ impl Engine {
         }
 
         (next, eval)
+    }
+
+    #[inline]
+    fn zw_search(
+        &self,
+        game: &Game,
+        killer: &ButterflyTable,
+        depth: usize,
+        ply: usize,
+        beta: Eval,
+    ) -> Eval {
+        self.evaluate_search(game, killer, depth, ply, Eval(beta.0 - 1), beta, false)
     }
 
     /// Perform an alpha-beta (fail-soft) principal variation search and return the evaluation
@@ -83,31 +83,6 @@ impl Engine {
         }
 
         eval
-    }
-
-    #[inline]
-    fn pvs(
-        &self,
-        expect_pv: bool,
-        game: &Game,
-        killer: &ButterflyTable,
-        depth: usize,
-        ply: usize,
-        alpha: Eval,
-        beta: Eval,
-        in_pv: bool,
-    ) -> Eval {
-        if expect_pv {
-            -self.evaluate_search(game, killer, depth, ply, -beta, -alpha, in_pv)
-        } else {
-            let zw = -self.zw_search(game, killer, depth, ply, -alpha);
-
-            if alpha < zw && zw < beta {
-                -self.evaluate_search(game, killer, depth, ply, -beta, -alpha, false)
-            } else {
-                zw
-            }
-        }
     }
 
     fn _evaluate_search(
@@ -151,7 +126,7 @@ impl Engine {
         let killer = ButterflyTable::new();
         let in_check = game.board().checkers().0 != 0;
 
-        if ply != 0 && !in_check && depth > 3 && in_pv {
+        if ply != 0 && !in_check && depth > 3 {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
             let eval = -self.zw_search(&game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
@@ -170,8 +145,8 @@ impl Engine {
         for (i, m) in moves.into_iter().enumerate() {
             let game = _game.make_move(m);
 
-            let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
-            // let this_depth = depth - 1;
+            let can_reduce = depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0;
+            let this_depth = if can_reduce { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
@@ -187,16 +162,20 @@ impl Engine {
                 }
             }
 
-            let mut eval = self.pvs(in_pv && i == 0, &game, &killer, this_depth, ply + 1, alpha, beta, in_pv);
-            if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
+            let mut eval;
 
-            if in_pv && this_depth < depth - 1 && best.1 < eval {
-                let new = self.pvs(true, &game, &killer, depth - 1, ply + 1, alpha, beta, in_pv);
+            if in_pv && i == 0 {
+                eval = -self.evaluate_search(&game, &killer, this_depth, ply + 1, -beta, -alpha, in_pv);
+            } else {
+                eval = -self.zw_search(&game, &killer, this_depth, ply + 1, -alpha);
 
-                if !self.times_up() {
-                    eval = new;
+                if alpha < eval && eval < beta && in_pv {
+                    eval = -self.evaluate_search(&game, &killer, depth - 1, ply + 1, -beta, -alpha, true);
                 }
             }
+
+            if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None) };
+
             if ply==0 {println!("{m} {eval} {:?}", self.find_pv(m, 10).iter().map(|i| i.to_string()).collect::<Vec<_>>())};
 
             if eval > best.1 || best.0 == ChessMove::default() {

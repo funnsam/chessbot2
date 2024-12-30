@@ -6,3 +6,5 @@ w        b         w        b         w         b
 a7a8 #-7 d7d8 #-12 g1e2 #-5 d1e2 #-19 f2e2 #-18 f5h3(??) +3.4
 
 (not overflow)
+
+952195
