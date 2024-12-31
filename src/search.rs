@@ -127,7 +127,7 @@ impl Engine {
         let killer = ButterflyTable::new();
         let in_check = game.board().checkers().0 != 0;
 
-        if ply != 0 && !in_check && depth > 3 {
+       /* if ply != 0 && !in_check && depth > 3 {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
             let eval = -self.zw_search(&game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
@@ -135,7 +135,7 @@ impl Engine {
             if eval >= beta {
                 return (ChessMove::default(), eval.incr_mate(), NodeType::None);
             }
-        }
+        }*/
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
         self.order_moves(&mut moves, game, &p_killer);
@@ -150,7 +150,7 @@ impl Engine {
             let this_depth = if can_reduce { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential
-            if !in_check && depth <= 2 {
+            /*if !in_check && depth <= 2 {
                 let eval = -evaluate_static(game.board());
                 let margin = 100 * depth as i16 * depth as i16;
 
@@ -161,7 +161,7 @@ impl Engine {
 
                     continue;
                 }
-            }
+            }*/
 
             let mut eval = Eval(i16::MIN);
             let needs_research;
@@ -185,6 +185,8 @@ impl Engine {
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None) };
 
             if ply==0 {println!("{m} {eval} {:?}", self.find_pv(m, 10).iter().map(|i| i.to_string()).collect::<Vec<_>>())};
+            // if _game.board().to_string()=="r1bq1rk1/pp2bpp1/2p1p2p/3n4/3P3Q/3B1N2/PPP2PPP/R1B2RK1 w - - 0 1" {println!(" !! {m} {eval}")};
+            // if _game.board().to_string()=="r1bq1rk1/pp2bpp1/2p1p2Q/3n4/3P4/3B1N2/PPP2PPP/R1B2RK1 b - - 0 1" {println!("  !! {m} {eval} {depth}")};
 
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
@@ -214,7 +216,7 @@ impl Engine {
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         for m in moves {
-            if see(game, m) < 0 { continue };
+            // if see(game, m) < 0 { continue };
 
             let game = game.make_move(m);
             let eval = -self.quiescence_search(&game, -beta, -alpha);

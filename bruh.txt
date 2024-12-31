@@ -8,3 +8,10 @@ a7a8 #-7 d7d8 #-12 g1e2 #-5 d1e2 #-19 f2e2 #-18 f5h3(??) +3.4
 (not overflow)
 
 952195
+
+
+r1bq1rk1/pp2bpp1/2p1pn1p/8/3PQ3/3B1N2/PPP2PPP/R1B2RK1 w - - 1 12
+
+e4h4 line
+e4h4, f6d5, h4h6??, g7h6 (33cp??)
+             └→ g7h6 -36cp (1 ply)
