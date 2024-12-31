@@ -116,6 +116,7 @@ impl Engine {
         }
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
+        let moves_len = moves.len();
         self.order_moves(&mut moves, game, &p_killer);
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
@@ -152,7 +153,12 @@ impl Engine {
             }
 
             if _game.board().piece_on(m.get_dest()).is_none() {
-                let bonus = ((eval >= beta || eval > alpha) as isize * 2 - 1) * depth as isize;
+                let d2 = (depth * depth) as isize;
+                let bonus = if eval >= beta || eval > alpha {
+                    d2 * (i + 1) as isize
+                } else {
+                    -d2 * (moves_len - i) as isize
+                };
 
                 p_killer.update(m, bonus);
                 self.hist_table.update(m, bonus);
