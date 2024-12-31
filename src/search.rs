@@ -116,13 +116,12 @@ impl Engine {
         }
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
-        let moves_len = moves.len();
         self.order_moves(&mut moves, game, &p_killer);
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let mut best = (ChessMove::default(), Eval::MIN);
         let _game = &game;
-        for (i, m) in moves.into_iter().enumerate() {
+        for (i, m) in moves.iter().copied().enumerate() {
             let game = _game.make_move(m);
 
             let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
@@ -152,24 +151,23 @@ impl Engine {
                 }
             }
 
-            if _game.board().piece_on(m.get_dest()).is_none() {
-                let d2 = (depth * depth) as isize;
-                let bonus = if eval >= beta || eval > alpha {
-                    d2 * (i + 1) as isize
-                } else {
-                    -d2 * (moves_len - i) as isize
-                };
-
-                self.hist_table.update(m, bonus);
-            }
-
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
                 if _game.board().piece_on(m.get_dest()).is_none() {
-                    p_killer.update(m, (depth * depth) as isize);
+                    let bonus = (depth * depth) as isize;
+
+                    for m in moves[..i].into_iter() {
+                        if _game.board().piece_on(m.get_dest()).is_none() {
+                            self.hist_table.update(*m, -bonus);
+                            p_killer.update(*m, -bonus);
+                        }
+                    }
+
+                    self.hist_table.update(m, bonus);
+                    p_killer.update(m, bonus);
                 }
 
                 return (best.0, best.1.incr_mate(), NodeType::LowerBound);

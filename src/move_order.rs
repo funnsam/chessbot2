@@ -28,7 +28,7 @@ impl ButterflyTable {
         unsafe {
             let h = &mut (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()];
 
-            const MAX: isize = 1000;
+            const MAX: isize = 32760;
             let bonus = bonus.min(MAX).max(-MAX);
             *h += bonus - *h * bonus.abs() / MAX;
         }
