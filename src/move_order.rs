@@ -63,8 +63,8 @@ impl crate::Engine {
         moves.sort_unstable_by(|a, b| {
             Ordering::Equal
                 .then_with(|| self.cmp_hash(game, *a, *b))
-                .then_with(|| self.countermove_heuristic(prev_move, *a, *b))
                 .then_with(|| mvv_lva(game, *a, *b))
+                .then_with(|| self.countermove_heuristic(prev_move, *a, *b))
                 .then_with(|| self.butterfly_heuristic(&self.hist_table, *a, *b))
                 .then_with(|| self.butterfly_heuristic(killer, *a, *b))
         });
