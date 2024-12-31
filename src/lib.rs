@@ -17,6 +17,7 @@ pub struct Engine {
     pub game: Game,
     trans_table: trans_table::TransTable,
     hist_table: move_order::ButterflyTable,
+    countermove: move_order::CountermoveTable,
 
     time_ref: RwLock<Instant>,
     time_usable: RwLock<Duration>,
@@ -32,6 +33,7 @@ impl Engine {
             game,
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
             hist_table: move_order::ButterflyTable::new(),
+            countermove: move_order::CountermoveTable::new(),
 
             time_ref: Instant::now().into(),
             time_usable: Duration::default().into(),

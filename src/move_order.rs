@@ -29,8 +29,30 @@ impl ButterflyTable {
     }
 }
 
+
+pub struct CountermoveTable(UnsafeCell<[ChessMove; 64 * 64]>);
+
+// SAFETY: we don't really care much about race conditions
+unsafe impl Sync for CountermoveTable {}
+
+impl CountermoveTable {
+    pub fn new() -> Self {
+        Self(UnsafeCell::new([ChessMove::default(); 64 * 64]))
+    }
+
+    pub fn clear(&self) {
+        unsafe { (*self.0.get()).fill(ChessMove::default()) }
+    }
+
+    pub fn update(&self, prev_move: ChessMove, m: ChessMove) {
+        unsafe {
+            (*self.0.get())[prev_move.get_source().to_index() * 64 + m.get_dest().to_index()] = m;
+        }
+    }
+}
+
 impl crate::Engine {
-    pub(crate) fn order_moves(&self, moves: &mut [ChessMove], game: &Game, killer: &ButterflyTable) {
+    pub(crate) fn order_moves(&self, prev_move: ChessMove, moves: &mut [ChessMove], game: &Game, killer: &ButterflyTable) {
         // we order moves with the following order:
         // 1. good hash moves
         // 2. bad hash moves
@@ -39,7 +61,9 @@ impl crate::Engine {
         // 5. bad MVV-LVA moves
 
         moves.sort_unstable_by(|a, b| {
-            self.cmp_hash(game, *a, *b)
+            Ordering::Equal
+                .then_with(|| self.cmp_hash(game, *a, *b))
+                .then_with(|| self.countermove_heuristic(prev_move, *a, *b))
                 .then_with(|| mvv_lva(game, *a, *b))
                 .then_with(|| self.butterfly_heuristic(&self.hist_table, *a, *b))
                 .then_with(|| self.butterfly_heuristic(killer, *a, *b))
@@ -54,6 +78,14 @@ impl crate::Engine {
     fn butterfly_heuristic(&self, bft: &ButterflyTable, a: ChessMove, b: ChessMove) -> Ordering {
         let value = |m: ChessMove| unsafe {
             (*bft.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
+        };
+
+        value(b).cmp(&value(a))
+    }
+
+    fn countermove_heuristic(&self, prev_move: ChessMove, a: ChessMove, b: ChessMove) -> Ordering {
+        let value = |m: ChessMove| unsafe {
+            (*self.countermove.0.get())[prev_move.get_source().to_index() * 64 + m.get_dest().to_index()] == m
         };
 
         value(b).cmp(&value(a))
