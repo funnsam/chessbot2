@@ -1,7 +1,7 @@
 use core::sync::atomic::Ordering;
 use crate::{*, eval::*, trans_table::*};
 use chess::{BoardStatus, ChessMove, MoveGen};
-use move_order::ButterflyTable;
+use move_order::KillerTable;
 
 impl Engine {
     pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
@@ -10,13 +10,13 @@ impl Engine {
         self.hist_table.clear();
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self._evaluate_search(ChessMove::default(), &self.game, &ButterflyTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
+        let prev = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
         let mut prev = (prev.0, prev.1, 1);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
         if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
-            let this = self._evaluate_search(ChessMove::default(), &self.game, &ButterflyTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+            let this = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -31,7 +31,7 @@ impl Engine {
         &self,
         prev_move: ChessMove,
         game: &Game,
-        killer: &ButterflyTable,
+        killer: &KillerTable,
         depth: usize,
         ply: usize,
         beta: Eval,
@@ -45,7 +45,7 @@ impl Engine {
         &self,
         prev_move: ChessMove,
         game: &Game,
-        killer: &ButterflyTable,
+        killer: &KillerTable,
         depth: usize,
         ply: usize,
         alpha: Eval,
@@ -70,7 +70,7 @@ impl Engine {
         &self,
         prev_move: ChessMove,
         game: &Game,
-        p_killer: &ButterflyTable,
+        p_killer: &KillerTable,
         depth: usize,
         ply: usize,
         mut alpha: Eval,
@@ -105,7 +105,7 @@ impl Engine {
             return (ChessMove::default(), self.quiescence_search(game, alpha, beta), NodeType::Exact);
         }
 
-        let killer = ButterflyTable::new();
+        let killer = KillerTable::new();
         let in_check = game.board().checkers().0 != 0;
 
         if ply != 0 && !in_check && depth > 3 && !in_zw {
@@ -162,7 +162,7 @@ impl Engine {
                 if _game.board().piece_on(m.get_dest()).is_none() {
                     p_killer.update(m, depth);
                     self.hist_table.update(m, depth);
-                    self.countermove.update(prev_move, m);
+                    *self.countermove.get_mut(prev_move) = m;
                 }
 
                 return (best.0, best.1.incr_mate(), NodeType::LowerBound);

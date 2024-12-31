@@ -16,7 +16,7 @@ mod trans_table;
 pub struct Engine {
     pub game: Game,
     trans_table: trans_table::TransTable,
-    hist_table: move_order::ButterflyTable,
+    hist_table: move_order::HistoryTable,
     countermove: move_order::CountermoveTable,
 
     time_ref: RwLock<Instant>,

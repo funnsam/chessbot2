@@ -4,55 +4,65 @@ use crate::Game;
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
-pub struct ButterflyTable(UnsafeCell<[usize; 64 * 64]>);
+pub struct ButterflyTable<T>(UnsafeCell<[T; 64 * 64]>);
 
-impl Clone for ButterflyTable {
+impl<T: Clone> Clone for ButterflyTable<T> {
     fn clone(&self) -> Self {
         unsafe { Self(UnsafeCell::new((*self.0.get()).clone())) }
     }
 }
 
 // SAFETY: we don't really care much about race conditions
-unsafe impl Sync for ButterflyTable {}
+unsafe impl<T: Sync> Sync for ButterflyTable<T> {}
 
-impl ButterflyTable {
+impl<T: Default> ButterflyTable<T> {
     pub fn new() -> Self {
-        Self(UnsafeCell::new([0; 64 * 64]))
+        Self(UnsafeCell::new(core::array::from_fn(|_| T::default())))
     }
 
     pub fn clear(&self) {
-        unsafe { (*self.0.get()).fill(0) }
-    }
-
-    pub fn update(&self, m: ChessMove, depth: usize) {
-        unsafe { (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()] += depth * depth };
+        unsafe { (*self.0.get()).fill_with(T::default); }
     }
 }
 
-
-pub struct CountermoveTable(UnsafeCell<[ChessMove; 64 * 64]>);
-
-// SAFETY: we don't really care much about race conditions
-unsafe impl Sync for CountermoveTable {}
-
-impl CountermoveTable {
-    pub fn new() -> Self {
-        Self(UnsafeCell::new([ChessMove::default(); 64 * 64]))
-    }
-
-    pub fn clear(&self) {
-        unsafe { (*self.0.get()).fill(ChessMove::default()) }
-    }
-
-    pub fn update(&self, prev_move: ChessMove, m: ChessMove) {
+impl<T> ButterflyTable<T> {
+    pub fn get_mut(&self, m: ChessMove) -> &mut T {
         unsafe {
-            (*self.0.get())[prev_move.get_source().to_index() * 64 + m.get_dest().to_index()] = m;
+            &mut (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
         }
     }
 }
 
+impl<T> core::ops::Index<ChessMove> for ButterflyTable<T> {
+    type Output = T;
+
+    fn index(&self, m: ChessMove) -> &Self::Output {
+        unsafe {
+            &(*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
+        }
+    }
+}
+
+impl<T> core::ops::IndexMut<ChessMove> for ButterflyTable<T> {
+    fn index_mut(&mut self, m: ChessMove) -> &mut Self::Output {
+        unsafe {
+            &mut (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
+        }
+    }
+}
+
+impl ButterflyTable<usize> {
+    pub fn update(&self, m: ChessMove, depth: usize) {
+        *self.get_mut(m) += depth * depth;
+    }
+}
+
+pub type HistoryTable = ButterflyTable<usize>;
+pub type KillerTable = ButterflyTable<usize>;
+pub type CountermoveTable = ButterflyTable<ChessMove>;
+
 impl crate::Engine {
-    pub(crate) fn order_moves(&self, prev_move: ChessMove, moves: &mut [ChessMove], game: &Game, killer: &ButterflyTable) {
+    pub(crate) fn order_moves(&self, prev_move: ChessMove, moves: &mut [ChessMove], game: &Game, killer: &KillerTable) {
         // we order moves with the following order:
         // 1. good hash moves
         // 2. bad hash moves
@@ -75,18 +85,12 @@ impl crate::Engine {
             .map_or(Ordering::Equal, |e| (b == e.next).cmp(&(a == e.next)))
     }
 
-    fn butterfly_heuristic(&self, bft: &ButterflyTable, a: ChessMove, b: ChessMove) -> Ordering {
-        let value = |m: ChessMove| unsafe {
-            (*bft.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
-        };
-
-        value(b).cmp(&value(a))
+    fn butterfly_heuristic(&self, bft: &ButterflyTable<usize>, a: ChessMove, b: ChessMove) -> Ordering {
+        bft[b].cmp(&bft[a])
     }
 
     fn countermove_heuristic(&self, prev_move: ChessMove, a: ChessMove, b: ChessMove) -> Ordering {
-        let value = |m: ChessMove| unsafe {
-            (*self.countermove.0.get())[prev_move.get_source().to_index() * 64 + m.get_dest().to_index()] == m
-        };
+        let value = |m: ChessMove|self.countermove[prev_move] == m;
 
         value(b).cmp(&value(a))
     }
