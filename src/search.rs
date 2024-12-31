@@ -157,7 +157,7 @@ impl Engine {
             }
             if eval >= beta {
                 if _game.board().piece_on(m.get_dest()).is_none() {
-                    let bonus = (depth * depth) as isize;
+                    let bonus = 300 * depth as isize - 250;
 
                     for m in moves[..i].into_iter() {
                         if _game.board().piece_on(m.get_dest()).is_none() {
