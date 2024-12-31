@@ -151,16 +151,18 @@ impl Engine {
                 }
             }
 
+            if _game.board().piece_on(m.get_dest()).is_none() {
+                let bonus = ((eval >= beta || eval > alpha) as isize * 2 - 1) * depth as isize;
+
+                p_killer.update(m, bonus);
+                self.hist_table.update(m, bonus);
+            }
+
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                if _game.board().piece_on(m.get_dest()).is_none() {
-                    p_killer.update(m, depth);
-                    self.hist_table.update(m, depth);
-                }
-
                 return (best.0, best.1.incr_mate(), NodeType::LowerBound);
             }
         }

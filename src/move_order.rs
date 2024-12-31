@@ -4,7 +4,7 @@ use crate::Game;
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
-pub struct ButterflyTable(UnsafeCell<[usize; 64 * 64]>);
+pub struct ButterflyTable(UnsafeCell<[isize; 64 * 64]>);
 
 impl Clone for ButterflyTable {
     fn clone(&self) -> Self {
@@ -24,8 +24,14 @@ impl ButterflyTable {
         unsafe { (*self.0.get()).fill(0) }
     }
 
-    pub fn update(&self, m: ChessMove, depth: usize) {
-        unsafe { (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()] += depth * depth };
+    pub fn update(&self, m: ChessMove, bonus: isize) {
+        unsafe {
+            let h = &mut (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()];
+
+            const MAX: isize = 1000;
+            let bonus = bonus.min(MAX).max(-MAX);
+            *h += bonus - *h * bonus.abs() / MAX;
+        }
     }
 }
 
