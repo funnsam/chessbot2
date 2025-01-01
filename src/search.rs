@@ -71,7 +71,7 @@ impl Engine {
         prev_move: ChessMove,
         game: &Game,
         p_killer: &KillerTable,
-        depth: usize,
+        mut depth: usize,
         ply: usize,
         mut alpha: Eval,
         beta: Eval,
@@ -119,7 +119,10 @@ impl Engine {
         }
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
-        self.order_moves(prev_move, &mut moves, game, &p_killer);
+        if self.order_moves(prev_move, &mut moves, game, &p_killer) && depth > 5 {
+            depth = depth * 2 / 3;
+        }
+
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let mut best = (ChessMove::default(), Eval::MIN);
