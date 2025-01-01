@@ -18,6 +18,7 @@ pub struct Engine {
     trans_table: trans_table::TransTable,
     hist_table: move_order::HistoryTable,
     countermove: move_order::CountermoveTable,
+    cm_history: Box<move_order::CmHistoryTable>,
 
     time_ref: RwLock<Instant>,
     time_usable: RwLock<Duration>,
@@ -34,6 +35,7 @@ impl Engine {
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
             hist_table: move_order::ButterflyTable::new(),
             countermove: move_order::CountermoveTable::new(),
+            cm_history: move_order::CmHistoryTable::new().into(),
 
             time_ref: Instant::now().into(),
             time_usable: Duration::default().into(),

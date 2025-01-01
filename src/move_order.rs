@@ -2,7 +2,7 @@ use core::cmp::*;
 use core::cell::UnsafeCell;
 use crate::Game;
 use crate::eval::PIECE_VALUE;
-use chess::ChessMove;
+use chess::{ChessMove, Piece, Square};
 
 pub struct ButterflyTable<T>(UnsafeCell<[T; 64 * 64]>);
 
@@ -15,9 +15,15 @@ impl<T: Clone> Clone for ButterflyTable<T> {
 // SAFETY: we don't really care much about race conditions
 unsafe impl<T: Sync> Sync for ButterflyTable<T> {}
 
+impl<T: Default> Default for ButterflyTable<T> {
+    fn default() -> Self {
+        Self(UnsafeCell::new(core::array::from_fn(|_| T::default())))
+    }
+}
+
 impl<T: Default> ButterflyTable<T> {
     pub fn new() -> Self {
-        Self(UnsafeCell::new(core::array::from_fn(|_| T::default())))
+        Self::default()
     }
 
     pub fn clear(&self) {
@@ -61,6 +67,22 @@ pub type HistoryTable = ButterflyTable<usize>;
 pub type KillerTable = ButterflyTable<usize>;
 pub type CountermoveTable = ButterflyTable<ChessMove>;
 
+pub struct CmHistoryTable([HistoryTable; 7 * 64]);
+
+impl CmHistoryTable {
+    pub fn new() -> Self {
+        Self(core::array::from_fn(|_| HistoryTable::default()))
+    }
+
+    pub fn idx(prev_piece: Piece, prev_to: Square) -> usize {
+        prev_piece.to_index() * 64 + prev_to.to_index()
+    }
+
+    pub fn update(&self, prev_piece: Piece, prev_to: Square, m: ChessMove, depth: usize) {
+        self.0[Self::idx(prev_piece, prev_to)].update(m, depth)
+    }
+}
+
 impl crate::Engine {
     pub(crate) fn order_moves(&self, prev_move: ChessMove, moves: &mut [ChessMove], game: &Game, killer: &KillerTable) {
         // we order moves with the following order:
@@ -70,9 +92,12 @@ impl crate::Engine {
         // 4. by killer heuristic
         // 5. bad MVV-LVA moves
 
+        let prev_piece = game.board().piece_on(prev_move.get_dest()).unwrap();
+
         moves.sort_unstable_by(|a, b| {
             self.cmp_hash(game, *a, *b)
                 .then_with(|| mvv_lva(game, *a, *b))
+                .then_with(|| self.cm_history_heuristic(prev_piece, prev_move, *a, *b))
                 .then_with(|| self.countermove_heuristic(prev_move, *a, *b))
                 .then_with(|| self.butterfly_heuristic(&self.hist_table, *a, *b))
                 .then_with(|| self.butterfly_heuristic(killer, *a, *b))
@@ -88,8 +113,14 @@ impl crate::Engine {
         bft[b].cmp(&bft[a])
     }
 
+    fn cm_history_heuristic(&self, prev_piece: Piece, prev_move: ChessMove, a: ChessMove, b: ChessMove) -> Ordering {
+        let value = |m: ChessMove| self.cm_history.0[CmHistoryTable::idx(prev_piece, prev_move.get_dest())][m];
+
+        value(b).cmp(&value(a))
+    }
+
     fn countermove_heuristic(&self, prev_move: ChessMove, a: ChessMove, b: ChessMove) -> Ordering {
-        let value = |m: ChessMove|self.countermove[prev_move] == m;
+        let value = |m: ChessMove| self.countermove[prev_move] == m;
 
         value(b).cmp(&value(a))
     }

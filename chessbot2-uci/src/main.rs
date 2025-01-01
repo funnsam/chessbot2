@@ -9,6 +9,11 @@ const DEFAULT_HASH_SIZE_MB: usize = 64;
 const MB: usize = 1024 * 1024;
 
 fn main() {
+//     println!("{:?} {}", stacker::remaining_stack(), core::mem::size_of::<Engine>());
+//     stacker::grow(32 * MB, _main);
+// }
+
+// fn _main() {
     let mut lines = std::io::stdin().lock().lines();
 
     let mut engine = Engine::new(Game::new(chess::Board::default()), DEFAULT_HASH_SIZE_MB * MB);

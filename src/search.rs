@@ -122,8 +122,10 @@ impl Engine {
         self.order_moves(prev_move, &mut moves, game, &p_killer);
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
-        let mut best = (ChessMove::default(), Eval::MIN);
         let _game = &game;
+        let prev_piece = _game.board().piece_on(prev_move.get_dest()).unwrap();
+
+        let mut best = (ChessMove::default(), Eval::MIN);
         for (i, m) in moves.into_iter().enumerate() {
             let game = _game.make_move(m);
 
@@ -163,6 +165,7 @@ impl Engine {
                     p_killer.update(m, depth);
                     self.hist_table.update(m, depth);
                     *self.countermove.get_mut(prev_move) = m;
+                    self.cm_history.update(prev_piece, prev_move.get_dest(), m, depth);
                 }
 
                 return (best.0, best.1.incr_mate(), NodeType::LowerBound);
