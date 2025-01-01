@@ -270,6 +270,7 @@ impl<S: Send + futures_util::stream::Stream<Item = ReqResult<bytes::Bytes>> + st
             }
         }
 
+        println!("{}", std::str::from_utf8(&self.buffer).ok()?);
         Some(from_str(std::str::from_utf8(&self.buffer).ok()?))
     }
 }

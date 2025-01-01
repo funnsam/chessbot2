@@ -1,5 +1,9 @@
+#![warn(clippy::future_not_send)]
+
 use core::str::FromStr;
-use std::{pin::Pin, sync::{atomic::*, Arc}, task::{Context, Poll}};
+use std::sync::{atomic::*, Arc};
+use std::pin::Pin;
+use std::task::*;
 use api::{move_from_uci, Challenge, Direction, Event, GameEvent, GameState, LichessApi, Player, Speed, Variant};
 use chess::*;
 
@@ -42,23 +46,30 @@ impl LichessClient {
 
                 info!("started a game with `{}` (id: `{id}`, fen: `{fen}`)", opponent.username.unwrap());
 
-                pub struct IamSend<F: Future>(F);
-                unsafe impl<F: Future> Send for IamSend<F> {}
-                impl<F: Future> Future for IamSend<F> {
-                    type Output = F::Output;
-                    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-                        unsafe { self.map_unchecked_mut(|s| &mut s.0).poll(cx) }
+                struct H {
+                    arc: Arc<LichessClient>,
+                    id: String,
+                    game: chessbot2::Game,
+                    color: Color,
+                }
+
+                impl Future for H {
+                    type Output = ();
+                    // arc.play_game(id, game, color).await
+                    fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<()> {
+                        std::pin::pin!(self.arc.play_game(self.id, self.game, self.color)).poll(ctx)
                     }
                 }
 
                 let arc = Arc::clone(&self);
                 let id = id.to_string();
-                tokio::spawn(IamSend(async move { arc.play_game(id, game, color.0).await }));
+                tokio::spawn(h(arc, id, game, color.0));
             },
-            Event::GameFinish { .. } => {
+            Event::GameFinish { game } => {
                 self.active_games.fetch_sub(1, Ordering::Relaxed);
+                dbg!("{game:?}");
             },
-            _ => {},
+            _ => dbg!("{event:?}"),
         }).await;
     }
 
@@ -75,7 +86,7 @@ impl LichessClient {
                     self.play(&game_id, color, state, &mut engine).await;
                 }
             },
-            _ => {},
+            _ => dbg!("{event:?}"),
         }).await;
 
         info!("stream ended (id: `{}`)", game_id);
