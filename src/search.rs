@@ -127,7 +127,8 @@ impl Engine {
         for (i, m) in moves.into_iter().enumerate() {
             let game = _game.make_move(m);
 
-            let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+            //let this_depth = if depth < 3 || in_check || i < 5 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
+            let this_depth = if depth < 3 || in_check || i == 0 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
