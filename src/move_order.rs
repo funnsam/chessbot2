@@ -67,7 +67,7 @@ pub type HistoryTable = ButterflyTable<usize>;
 pub type KillerTable = ButterflyTable<usize>;
 pub type CountermoveTable = ButterflyTable<ChessMove>;
 
-pub struct CmHistoryTable([HistoryTable; 7 * 64]);
+pub struct CmHistoryTable([HistoryTable; 6 * 64]);
 
 impl CmHistoryTable {
     pub fn new() -> Self {
