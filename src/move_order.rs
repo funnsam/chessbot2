@@ -1,6 +1,6 @@
 use core::cmp::*;
 use core::cell::UnsafeCell;
-use crate::Game;
+use crate::{Eval, Game};
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
@@ -62,7 +62,17 @@ pub type KillerTable = ButterflyTable<usize>;
 pub type CountermoveTable = ButterflyTable<ChessMove>;
 
 impl crate::Engine {
-    pub(crate) fn order_moves(&self, prev_move: ChessMove, moves: &mut [ChessMove], game: &Game, killer: &KillerTable) {
+    pub(crate) fn order_moves(
+        &self,
+        depth: usize,
+        ply: usize,
+        alpha: Eval,
+        beta: Eval,
+        prev_move: ChessMove,
+        moves: &mut [ChessMove],
+        game: &Game,
+        killer: &KillerTable,
+    ) {
         // we order moves with the following order:
         // 1. good hash moves
         // 2. bad hash moves
@@ -70,18 +80,19 @@ impl crate::Engine {
         // 4. by killer heuristic
         // 5. bad MVV-LVA moves
 
+        let mut tte = self.trans_table.get(game.board().get_hash());
+        if depth > 5 && tte.is_none() {
+            self.evaluate_search(prev_move, game, &KillerTable::new(), depth / 4, ply + 1, alpha, beta, false);
+            tte = self.trans_table.get(game.board().get_hash());
+        }
+
         moves.sort_unstable_by(|a, b| {
-            self.cmp_hash(game, *a, *b)
+            tte.map_or(Ordering::Equal, |e| (*b == e.next).cmp(&(*a == e.next)))
                 .then_with(|| mvv_lva(game, *a, *b))
                 .then_with(|| self.countermove_heuristic(prev_move, *a, *b))
                 .then_with(|| self.butterfly_heuristic(&self.hist_table, *a, *b))
                 .then_with(|| self.butterfly_heuristic(killer, *a, *b))
         });
-    }
-
-    fn cmp_hash(&self, game: &Game, a: ChessMove, b: ChessMove) -> Ordering {
-        self.trans_table.get(game.board().get_hash())
-            .map_or(Ordering::Equal, |e| (b == e.next).cmp(&(a == e.next)))
     }
 
     fn butterfly_heuristic(&self, bft: &ButterflyTable<usize>, a: ChessMove, b: ChessMove) -> Ordering {

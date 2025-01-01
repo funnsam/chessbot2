@@ -41,7 +41,7 @@ impl Engine {
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
     #[inline]
-    fn evaluate_search(
+    pub(crate) fn evaluate_search(
         &self,
         prev_move: ChessMove,
         game: &Game,
@@ -119,7 +119,7 @@ impl Engine {
         }
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
-        self.order_moves(prev_move, &mut moves, game, &p_killer);
+        self.order_moves(depth, ply, alpha, beta, prev_move, &mut moves, game, &p_killer);
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let mut best = (ChessMove::default(), Eval::MIN);
