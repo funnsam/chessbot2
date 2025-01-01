@@ -1,8 +1,11 @@
+use std::io::Read;
+
 use chess::{ChessMove, Color, Piece, Square};
-use reqwest::{header, Client, Request, Response, Result as ReqResult};
+// use reqwest::{header, Client, Request, Response, Result as ReqResure
 use serde::Deserialize;
 use serde_json::from_str;
-use crate::{error, info, warn};
+use ureq::{Request, Response};
+use crate::{dbg, error, info, warn};
 
 pub struct LichessApi {
     api_token: String,
@@ -20,7 +23,7 @@ pub struct Error<'a> {
 #[serde(rename_all = "camelCase")]
 #[serde(rename_all_fields = "camelCase")]
 pub enum GameEvent<'a> {
-    GameFull { state: GameState<'a> },
+    GameFull { initial_fen: &'a str, state: GameState<'a> },
     GameState { #[serde(flatten)] state: GameState<'a> },
     ChatLine {},
     OpponentGone {},
@@ -125,68 +128,49 @@ impl LichessApi {
         Self { api_token }
     }
 
-    fn client(&self) -> Client {
-        let mut headers = header::HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            header::HeaderValue::from_str(
-                &format!("Bearer {}", self.api_token)
-            ).unwrap()
-        );
-        Client::builder()
-            .default_headers(headers)
-            // .connection_verbose(true)
-            .build().unwrap()
+    fn request(&self, req: Request) -> Request {
+        req.set("Authorization", &format!("Bearer {}", self.api_token))
     }
 
-    fn http<F: Fn(&Client) -> Request>(&self, f: F) -> impl Future<Output = ReqResult<Response>> {
-        let client = self.client();
-        client.execute(f(&client))
+    fn http(&self, req: Request) -> Result<Response, ureq::Error> {
+        self.request(req).call()
     }
 
-    pub async fn listen<F: AsyncFnMut(Event<'_>)>(&self, mut on_event: F) {
-        let stream = self.http(|c| c
-            .get("https://lichess.org/api/stream/event")
-            .build().unwrap()
-        ).await.unwrap().bytes_stream();
-        let mut stream = NdJsonIter::new(stream);
+    pub fn listen<F: FnMut(Event<'_>)>(&self, mut on_event: F) {
+        let stream = self.http(ureq::get("https://lichess.org/api/stream/event")).unwrap().into_reader();
+        let mut stream = JsonStreamIter::new(stream);
 
         info!("starting to listen for incoming games");
 
-        while let Some(event) = stream.next_json::<Event<'_>>().await {
+        while let Some(event) = stream.next_json::<Event<'_>>() {
             match event {
-                Ok(ev) => on_event(ev).await,
+                Ok(Ok(Ok(ev))) => on_event(ev),
+                Ok(Ok(Err(err))) => error!("got error in event stream: {err}"),
+                Ok(Err(err)) => error!("got error in event stream: {err}"),
                 Err(err) => error!("got error in event stream: {err}"),
             }
         }
     }
 
-    pub async fn listen_game<F: AsyncFnMut(GameEvent<'_>)>(&self, id: &str, mut on_event: F) {
-        let stream = self.http(|c| c
-            .get(format!("https://lichess.org/api/bot/game/stream/{id}"))
-            .build().unwrap()
-        ).await.unwrap().bytes_stream();
-        let mut stream = NdJsonIter::new(stream);
+    pub fn listen_game<F: FnMut(GameEvent<'_>)>(&self, id: &str, mut on_event: F) {
+        let stream = self.http(ureq::get(&format!("https://lichess.org/api/bot/game/stream/{id}"))).unwrap().into_reader();
+        let mut stream = JsonStreamIter::new(stream);
 
-        while let Some(event) = stream.next_json::<GameEvent<'_>>().await {
+        while let Some(event) = stream.next_json::<GameEvent<'_>>() {
             match event {
-                Ok(ev) => on_event(ev).await,
+                Ok(Ok(Ok(ev))) => on_event(ev),
+                Ok(Ok(Err(err))) => error!("got error in game event stream: {err}"),
+                Ok(Err(err)) => error!("got error in game event stream: {err}"),
                 Err(err) => error!("got error in game event stream: {err}"),
             }
         }
     }
 
-    pub async fn send_move(&self, game_id: &str, m: ChessMove) {
+    pub fn send_move(&self, game_id: &str, m: ChessMove) {
         loop {
-            let client = Client::new();
-            if let Ok(resp) = client.execute(
-                client
-                .post(format!("https://lichess.org/api/bot/game/{game_id}/move/{m}"))
-                .header("Authorization", format!("Bearer {}", self.api_token))
-                .build().unwrap()
-            ).await {
-                if !resp.status().is_success() {
-                    let reason = resp.text().await.unwrap();
+            if let Ok(resp) = self.http(ureq::post(&format!("https://lichess.org/api/bot/game/{game_id}/move/{m}"))) {
+                if !success(resp.status()) {
+                    let reason = resp.into_string().unwrap();
                     let reason = from_str::<Error<'_>>(&reason).unwrap();
                     warn!("move {} invalid ({})", m, reason.error);
                 }
@@ -196,82 +180,73 @@ impl LichessApi {
         }
     }
 
-    pub async fn accept_challenge(&self, id: &str) {
-        if self.http(|c| c
-            .post(format!("https://lichess.org/api/challenge/{id}/accept"))
-            .build().unwrap()
-        ).await.ok().and_then(|a| a.status().is_success().then(|| ())).is_none() {
+    pub fn accept_challenge(&self, id: &str) {
+        if self.http(ureq::post(&format!("https://lichess.org/api/challenge/{id}/accept")))
+            .ok()
+            .and_then(|a| success(a.status()).then(|| ()))
+            .is_none()
+        {
             warn!("failed to accept challenge id {id}");
         }
     }
 
-    pub async fn decline_challenge(&self, id: &str, reason: &str) {
-        if self.http(|c| c
-            .post(format!("https://lichess.org/api/challenge/{id}/decline"))
-            .body(format!("reason={reason}"))
-            .build().unwrap()
-        ).await.ok().and_then(|a| a.status().is_success().then(|| ())).is_none() {
+    pub fn decline_challenge(&self, id: &str, reason: &str) {
+        if self.request(ureq::post(&format!("https://lichess.org/api/challenge/{id}/decline")))
+            .send_form(&[("reason", reason)])
+            .ok()
+            .and_then(|a| success(a.status()).then(|| ()))
+            .is_none()
+        {
             warn!("failed to decline challenge id {id}");
         }
     }
 }
 
-struct NdJsonIter<S: Send + futures_util::stream::Stream<Item = ReqResult<bytes::Bytes>>> {
-    stream: S,
+struct JsonStreamIter<R: Read> {
+    stream: R,
     buffer: Vec<u8>,
-    leftover: Vec<u8>,
 }
 
-impl<S: Send + futures_util::stream::Stream<Item = ReqResult<bytes::Bytes>> + std::marker::Unpin> NdJsonIter<S> {
-    fn new(stream: S) -> Self {
+impl<R: Read> JsonStreamIter<R> {
+    fn new(stream: R) -> Self {
         Self {
             stream,
             buffer: Vec::new(),
-            leftover: Vec::new(),
         }
     }
 
-    async fn next_json<'a, T: 'a + Deserialize<'a>>(&'a mut self) -> Option<Result<T, serde_json::Error>> {
+    fn next_json<'a, T: Deserialize<'a>>(&'a mut self) -> Option<Result<Result<serde_json::Result<T>, std::str::Utf8Error>, std::io::Error>> {
         self.buffer.clear();
 
-        let mut used = 0;
-        let mut done = false;
-        for b in self.leftover.iter() {
-            used += 1;
-            if *b != b'\n' {
-                self.buffer.push(*b);
-            } else if !self.buffer.is_empty() {
-                done = true;
-                break;
-            }
-        }
+        let mut buf = [0];
+        let mut level = 0;
 
-        self.leftover = self.leftover[used..].to_vec();
-
-        if done {
-            return Some(from_str(std::str::from_utf8(&self.buffer).ok()?));
-        }
-
-        use futures_util::stream::StreamExt;
-        'l: loop {
-            match self.stream.next().await {
-                Some(Ok(i)) => for (j, b) in i.iter().enumerate() {
-                    if *b != b'\n' {
-                        self.buffer.push(*b);
-                    } else if !self.buffer.is_empty() {
-                        self.leftover.extend(&i[j..]);
-                        break 'l;
-                    } else {
-                        std::hint::black_box(());
-                    }
+        loop {
+            match self.stream.read(&mut buf) {
+                // Ok(b) if b == 1 => {
+                //     match buf[0] {
+                //         b'\n' => continue,
+                //         b'{' => level += 1,
+                //         b'}' if level == 1 => { self.buffer.push(b'}'); break },
+                //         b'}' => level -= 1,
+                //         _ => {},
+                //     }
+                //     self.buffer.push(buf[0]);
+                // },
+                Ok(b) if b == 1 => match buf[0] {
+                    b'\n' if self.buffer.is_empty() => continue,
+                    b'\n' => break,
+                    b => self.buffer.push(b),
                 },
-                Some(Err(i)) => panic!("{i}"),
-                None => return None,
+                Err(err) => return Some(Err(err)),
+                Ok(_) => return None,
             }
         }
 
-        println!("{}", std::str::from_utf8(&self.buffer).ok()?);
-        Some(from_str(std::str::from_utf8(&self.buffer).ok()?))
+        match std::str::from_utf8(&self.buffer) {
+            Ok(s) => { dbg!("{s}"); Some(Ok(Ok(from_str(s)))) },
+            Err(err) => Some(Ok(Err(err))),
+        }
     }
 }
 
@@ -291,4 +266,8 @@ pub fn move_from_uci(m: &str) -> ChessMove {
     });
 
     ChessMove::new(src, dst, piece)
+}
+
+fn success(status: u16) -> bool {
+    (200..=299).contains(&status)
 }
