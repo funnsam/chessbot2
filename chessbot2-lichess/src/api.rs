@@ -61,7 +61,7 @@ pub struct Game<'a> {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Challenge<'a> {
-    pub direction: Direction,
+    pub direction: Option<Direction>,
     pub id: &'a str,
     pub challenger: Player<'a>,
     pub variant: Variant<'a>,
@@ -144,7 +144,7 @@ impl LichessApi {
         client.execute(f(&client))
     }
 
-    pub async fn listen<F: AsyncFnMut(Event)>(&self, mut on_event: F) {
+    pub async fn listen<F: AsyncFnMut(Event<'_>)>(&self, mut on_event: F) {
         let stream = self.http(|c| c
             .get("https://lichess.org/api/stream/event")
             .build().unwrap()
@@ -161,7 +161,7 @@ impl LichessApi {
         }
     }
 
-    pub async fn listen_game<F: AsyncFnMut(GameEvent)>(&self, id: &str, mut on_event: F) {
+    pub async fn listen_game<F: AsyncFnMut(GameEvent<'_>)>(&self, id: &str, mut on_event: F) {
         let stream = self.http(|c| c
             .get(format!("https://lichess.org/api/bot/game/stream/{id}"))
             .build().unwrap()
@@ -231,7 +231,7 @@ impl<S: Send + futures_util::stream::Stream<Item = ReqResult<bytes::Bytes>> + st
         }
     }
 
-    async fn next_json<'a, T: Deserialize<'a>>(&'a mut self) -> Option<Result<T, serde_json::Error>> {
+    async fn next_json<'a, T: 'a + Deserialize<'a>>(&'a mut self) -> Option<Result<T, serde_json::Error>> {
         self.buffer.clear();
 
         let mut used = 0;
@@ -253,14 +253,14 @@ impl<S: Send + futures_util::stream::Stream<Item = ReqResult<bytes::Bytes>> + st
         }
 
         use futures_util::stream::StreamExt;
-        'a: loop {
+        'l: loop {
             match self.stream.next().await {
                 Some(Ok(i)) => for (j, b) in i.iter().enumerate() {
                     if *b != b'\n' {
                         self.buffer.push(*b);
                     } else if !self.buffer.is_empty() {
                         self.leftover.extend(&i[j..]);
-                        break 'a;
+                        break 'l;
                     } else {
                         std::hint::black_box(());
                     }

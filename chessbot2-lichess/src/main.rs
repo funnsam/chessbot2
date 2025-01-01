@@ -23,7 +23,7 @@ impl LichessClient {
     pub async fn listen(self: Arc<Self>) {
         self.api.listen(async |event| match event {
             Event::Challenge { challenge: Challenge { direction, id, challenger: Player { name: Some(challenger), .. }, variant: Variant { key: variant }, speed, rated } } => {
-                if direction == Direction::Out { return };
+                if direction == Some(Direction::Out) { return };
                 let is_su = EXCEPTION_USERS.contains(&challenger);
 
                 info!("user `{challenger}` challenged bot (id: `{id}`, variant: {variant:?}, time control: {speed:?}, rated: {rated})");
