@@ -33,7 +33,7 @@ impl Engine {
         alpha: Eval,
         beta: Eval,
     ) -> (ChessMove, Eval) {
-        let (next, eval, nt) = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, alpha, beta, true);
+        let (next, eval, nt) = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, alpha, beta, false, true);
 
         self.store_tt(depth, &self.game, (next, eval, nt));
 
@@ -50,7 +50,7 @@ impl Engine {
         ply: usize,
         beta: Eval,
     ) -> Eval {
-        self.evaluate_search(prev_move, game, killer, depth, ply, Eval(beta.0 - 1), beta, true)
+        self.evaluate_search(prev_move, game, killer, depth, ply, Eval(beta.0 - 1), beta, true, false)
     }
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
@@ -65,8 +65,9 @@ impl Engine {
         alpha: Eval,
         beta: Eval,
         in_zw: bool,
+        is_pv: bool,
     ) -> Eval {
-        let (next, eval, nt) = self._evaluate_search(prev_move, game, killer, depth, ply, alpha, beta, in_zw);
+        let (next, eval, nt) = self._evaluate_search(prev_move, game, killer, depth, ply, alpha, beta, in_zw, is_pv);
 
         self.store_tt(depth, game, (next, eval, nt));
 
@@ -94,6 +95,7 @@ impl Engine {
         mut alpha: Eval,
         beta: Eval,
         in_zw: bool,
+        is_pv: bool,
     ) -> (ChessMove, Eval, NodeType) {
         if game.can_declare_draw() {
             return (ChessMove::default(), Eval(0), NodeType::None);
@@ -127,8 +129,8 @@ impl Engine {
 
         // internal iterative reductions
         // TODO: is not limiting depth correct? it increases elo for me
-        if ply > 0 /* && depth >= 4 */ && self.trans_table.get(game.board().get_hash()).is_none() {
-            let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, in_zw);
+        if !is_pv /* && depth >= 4 */ && self.trans_table.get(game.board().get_hash()).is_none() {
+            let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, in_zw, false);
             self.store_tt(depth / 4, game, low);
 
             if low.1 <= alpha {
@@ -174,11 +176,11 @@ impl Engine {
                 }
             }
 
-            let mut eval = -self.evaluate_search(m, &game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw);
+            let mut eval = -self.evaluate_search(m, &game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw, is_pv && i == 0);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
 
             if this_depth < depth - 1 && best.1 < eval {
-                let new = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
+                let new = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw, is_pv);
 
                 if !self.times_up() {
                     eval = new;
