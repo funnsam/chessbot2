@@ -38,6 +38,33 @@ impl Eval {
     }
 }
 
+impl core::ops::Add<i16> for Eval {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, rhs: i16) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl core::ops::Sub<i16> for Eval {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, rhs: i16) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
+impl core::ops::Sub<Eval> for i16 {
+    type Output = Eval;
+
+    #[inline]
+    fn sub(self, rhs: Eval) -> Self::Output {
+        Eval(self - rhs.0)
+    }
+}
+
 impl core::ops::Neg for Eval {
     type Output = Self;
 
