@@ -160,8 +160,6 @@ impl Engine {
         for (i, m) in moves.into_iter().enumerate() {
             let game = _game.make_move(m);
 
-            let this_depth = if depth < 3 || in_check || i < 1 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
-
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
                 let eval = -evaluate_static(game.board());
@@ -176,16 +174,27 @@ impl Engine {
                 }
             }
 
-            let mut eval = -self.evaluate_search(m, &game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw, is_pv && i == 0);
-            if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
+            let can_reduce = depth >= 3 && !in_check && i > 0;
 
-            if this_depth < depth - 1 && best.1 < eval {
-                let new = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw, is_pv);
+            let mut eval = Eval(i16::MIN);
+            let do_full_research = if can_reduce {
+                eval = -self.zw_search(m, &game, &killer, depth / 2, ply + 1, -alpha);
+                alpha < eval && eval < beta
+            } else {
+                !is_pv || i > 0
+            };
 
-                if !self.times_up() {
-                    eval = new;
-                }
+            if do_full_research {
+                eval = -self.zw_search(m, &game, &killer, depth - 1, ply + 1, -alpha);
             }
+
+            if is_pv && ((alpha < eval && eval < beta) || i == 0) {
+                eval = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw, true);
+            }
+
+            debug_assert_ne!(eval, Eval(i16::MIN));
+
+            if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None) };
 
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
