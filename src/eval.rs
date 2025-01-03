@@ -99,9 +99,9 @@ pub fn evaluate_static(board: &Board) -> Eval {
             && (board.pieces(Piece::Pawn) & chess::get_file(square.get_file())).0 == 0
         ) as i16 * 20;
         let pawn_shield = if piece == Piece::King {
-            // TODO: add open file next to king detection and allow pawns up 1 square, possibly
-            // tune the PST too
-            (board.pieces(Piece::Pawn) & chess::get_king_moves(square)).popcnt() as i16 * 20
+            // TODO: add open file next to king detection
+            let king_center = square.uforward(color);
+            3_i16.saturating_sub((board.pieces(Piece::Pawn) & (chess::get_king_moves(king_center) | BitBoard::from_square(king_center))).popcnt() as i16) * -35
         } else { 0 };
 
         let idx = (square.to_index() ^ (63 * (color == Color::Black) as usize)) | (piece.to_index() << 6);
