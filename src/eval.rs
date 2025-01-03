@@ -98,9 +98,14 @@ pub fn evaluate_static(board: &Board) -> Eval {
         let rook_on_open_file = (piece == Piece::Rook
             && (board.pieces(Piece::Pawn) & chess::get_file(square.get_file())).0 == 0
         ) as i16 * 20;
+        let pawn_shield = if piece == Piece::King {
+            // TODO: add open file next to king detection and allow pawns up 1 square, possibly
+            // tune the PST too
+            (board.pieces(Piece::Pawn) & chess::get_king_moves(square)).popcnt() as i16 * 20
+        } else { 0 };
 
         let idx = (square.to_index() ^ (63 * (color == Color::Black) as usize)) | (piece.to_index() << 6);
-        mid_game[color.to_index()] += rook_on_open_file + PIECE_SQUARE_TABLE_MID[idx] + PIECE_VALUE_MID[piece.to_index()];
+        mid_game[color.to_index()] += rook_on_open_file + pawn_shield + PIECE_SQUARE_TABLE_MID[idx] + PIECE_VALUE_MID[piece.to_index()];
         end_game[color.to_index()] += rook_on_open_file + PIECE_SQUARE_TABLE_END[idx] + PIECE_VALUE_END[piece.to_index()];
         phase += PIECE_PHASE[piece.to_index()];
     }
