@@ -83,7 +83,7 @@ fn test_eval() {
     assert_eq!(m_1.0 as u16, 0x8001);
 }
 
-/// Implements https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function
+/// Mostly PeSTO's evaluation with rook on open file bonus
 pub fn evaluate_static(board: &Board) -> Eval {
     let mut mid_game = [0, 0];
     let mut end_game = [0, 0];
@@ -94,10 +94,14 @@ pub fn evaluate_static(board: &Board) -> Eval {
         let piece = unsafe { board.piece_on(square).unwrap_unchecked() };
         let color = unsafe { board.color_on(square).unwrap_unchecked() };
 
-        let idx = (square.to_index() ^ (63 * (color == Color::Black) as usize)) | (piece.to_index() << 6);
+        // rook on open file bonus
+        let rook_on_open_file = (piece == Piece::Rook
+            && (board.pieces(Piece::Pawn) & chess::get_file(square.get_file())).0 == 0
+        ) as i16 * 20;
 
-        mid_game[color as usize] += PIECE_SQUARE_TABLE_MID[idx] + PIECE_VALUE_MID[piece.to_index()];
-        end_game[color as usize] += PIECE_SQUARE_TABLE_END[idx] + PIECE_VALUE_END[piece.to_index()];
+        let idx = (square.to_index() ^ (63 * (color == Color::Black) as usize)) | (piece.to_index() << 6);
+        mid_game[color.to_index()] += rook_on_open_file + PIECE_SQUARE_TABLE_MID[idx] + PIECE_VALUE_MID[piece.to_index()];
+        end_game[color.to_index()] += rook_on_open_file + PIECE_SQUARE_TABLE_END[idx] + PIECE_VALUE_END[piece.to_index()];
         phase += PIECE_PHASE[piece.to_index()];
     }
 
