@@ -51,14 +51,16 @@ impl<T> core::ops::IndexMut<ChessMove> for ButterflyTable<T> {
     }
 }
 
-impl ButterflyTable<usize> {
-    pub fn update(&self, m: ChessMove, depth: usize) {
-        *self.get_mut(m) += depth * depth;
+impl ButterflyTable<isize> {
+    pub fn update(&self, m: ChessMove, bonus: isize) {
+        const MAX: isize = 32760;
+        let bonus = bonus.min(MAX).max(-MAX);
+        *self.get_mut(m) += bonus - self[m] * bonus.abs() / MAX;
     }
 }
 
-pub type HistoryTable = ButterflyTable<usize>;
-pub type KillerTable = ButterflyTable<usize>;
+pub type HistoryTable = ButterflyTable<isize>;
+pub type KillerTable = ButterflyTable<isize>;
 pub type CountermoveTable = ButterflyTable<ChessMove>;
 
 impl crate::Engine {
@@ -81,7 +83,7 @@ impl crate::Engine {
         });
     }
 
-    fn butterfly_heuristic(&self, bft: &ButterflyTable<usize>, a: ChessMove, b: ChessMove) -> Ordering {
+    fn butterfly_heuristic(&self, bft: &ButterflyTable<isize>, a: ChessMove, b: ChessMove) -> Ordering {
         bft[b].cmp(&bft[a])
     }
 

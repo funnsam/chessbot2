@@ -1,5 +1,6 @@
 target
 *.pgn
+*.epd
 *.zip
 /config.json
 /engines
