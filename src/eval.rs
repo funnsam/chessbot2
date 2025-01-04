@@ -21,8 +21,8 @@ impl Eval {
     #[inline]
     pub fn incr_mate(self) -> Self {
         match self.0 as u16 >> 14 {
-            // 1 => Self(self.0 - 1),
-            // 2 => Self(self.0 + 1),
+            1 => Self(self.0 - 1),
+            2 => Self(self.0 + 1),
             _ => self,
         }
     }

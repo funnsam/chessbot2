@@ -10,13 +10,13 @@ impl Engine {
         self.hist_table.clear();
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self.root_search(1, Eval::MIN + 1, Eval::MAX - 1);
+        let prev = self.root_search(1, Eval::MIN, Eval::MAX);
         let mut prev = (prev.0, prev.1, 1);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
         if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
-            let this = self.root_search(depth, Eval::MIN + 1, Eval::MAX - 1);
+            let this = self.root_search(depth, Eval::MIN, Eval::MAX);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -129,26 +129,27 @@ impl Engine {
 
         // internal iterative reductions
         // TODO: is not limiting depth correct? it increases elo for me
-        // if !is_pv /* && depth >= 4 */ && self.trans_table.get(game.board().get_hash()).is_none() {
-        //     let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, in_zw, false);
-        //     self.store_tt(depth / 4, game, low);
+        if !is_pv /* && depth >= 4 */ && self.trans_table.get(game.board().get_hash()).is_none() {
+            let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, in_zw, false);
+            self.store_tt(depth / 4, game, low);
 
-        //     if low.1 <= alpha {
-        //         return (low.0, low.1, NodeType::None);
-        //     }
-        // }
+            if low.1 <= alpha {
+                return (low.0, low.1, NodeType::None);
+            }
+        }
 
         let in_check = game.board().checkers().0 != 0;
 
-        // if ply != 0 && !in_check && depth > 3 {
-        //     let game = game.make_null_move().unwrap();
-        //     let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-        //     let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
+        // null move pruning
+        if ply != 0 && !in_check && depth > 3 && !in_zw {
+            let game = game.make_null_move().unwrap();
+            let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
+            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
 
-        //     if eval >= beta {
-        //         return (ChessMove::default(), eval.incr_mate(), NodeType::None);
-        //     }
-        // }
+            if eval >= beta {
+                return (ChessMove::default(), eval.incr_mate(), NodeType::None);
+            }
+        }
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
         self.order_moves(prev_move, &mut moves, game, &p_killer);
@@ -162,18 +163,18 @@ impl Engine {
             let game = _game.make_move(m);
 
             // futility pruning: kill nodes with no potential
-            // if !in_check && depth <= 2 {
-            //     let eval = -evaluate_static(game.board());
-            //     let margin = 100 * depth as i16 * depth as i16;
+            if !in_check && depth <= 2 {
+                let eval = -evaluate_static(game.board());
+                let margin = 100 * depth as i16 * depth as i16;
 
-            //     if eval.0 + margin < alpha.0 {
-            //         if best.0 == ChessMove::default() {
-            //             best = (m, eval - margin);
-            //         }
+                if eval.0 + margin < alpha.0 {
+                    if best.0 == ChessMove::default() {
+                        best = (m, eval - margin);
+                    }
 
-            //         continue;
-            //     }
-            // }
+                    continue;
+                }
+            }
 
             let can_reduce = depth >= 3 && !in_check && real_i != 0;
 
@@ -235,7 +236,7 @@ impl Engine {
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         for m in moves {
-            // if see(game, m) < 0 { continue };
+            if see(game, m) < 0 { continue };
 
             let game = game.make_move(m);
             let eval = -self.quiescence_search(&game, -beta, -alpha);
