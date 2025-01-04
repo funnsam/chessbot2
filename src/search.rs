@@ -177,23 +177,21 @@ impl Engine {
 
             let can_reduce = depth >= 3 && !in_check && real_i != 0;
 
-            let mut eval = None;
+            let mut eval = Eval(i16::MIN);
             let do_full_research = if can_reduce {
-                eval = Some(-self.zw_search(m, &game, &killer, depth / 2, ply + 1, -alpha));
-                alpha < eval.unwrap() && depth / 2 < depth - 1
+                eval = -self.zw_search(m, &game, &killer, depth / 2, ply + 1, -alpha);
+                alpha < eval && depth / 2 < depth - 1
             } else {
                 !is_pv || real_i != 0
             };
 
             if do_full_research {
-                eval = Some(-self.zw_search(m, &game, &killer, depth - 1, ply + 1, -alpha));
+                eval = -self.zw_search(m, &game, &killer, depth - 1, ply + 1, -alpha);
             }
 
-            if is_pv && (real_i == 0 || alpha < eval.unwrap()) {
-                eval = Some(-self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw, true));
+            if is_pv && (real_i == 0 || alpha < eval) {
+                eval = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw, true);
             }
-
-            let eval = eval.unwrap();
 
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None) };
 

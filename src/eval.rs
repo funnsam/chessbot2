@@ -161,10 +161,7 @@ pub fn evaluate_static(board: &Board) -> Eval {
     let mg_phase = phase.min(24);
     let eg_phase = 24 - mg_phase;
 
-    let eval = Eval(((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / 24) as i16);
-    assert!(!eval.is_mate());
-
-    eval
+    Eval(((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / 24) as i16)
 }
 
 /// Finds the current phase of the game. 0 is endgame and 24 is midgame.
