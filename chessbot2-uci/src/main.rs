@@ -38,7 +38,7 @@ fn main() {
 
                 engine.game = position;
             },
-            Some(uci::UciCommand::Go { depth: target_depth, movetime, wtime, btime }) => {
+            Some(uci::UciCommand::Go { depth: target_depth, movetime, wtime, btime, movestogo }) => {
                 let tc = if matches!(engine.game.board().side_to_move(), chess::Color::White) {
                     wtime
                 } else {
@@ -47,7 +47,7 @@ fn main() {
                 if let Some(mt) = movetime {
                     engine.allow_for(mt);
                 } else if let Some(tc) = tc {
-                    engine.time_control(tc);
+                    engine.time_control(movestogo, tc);
                 } else {
                     engine.allow_for(std::time::Duration::MAX);
                 }

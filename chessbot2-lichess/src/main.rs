@@ -1,5 +1,4 @@
 #![warn(clippy::future_not_send)]
-#![feature(async_closure)]
 
 use core::str::FromStr;
 use std::sync::{atomic::*, Arc};
@@ -88,7 +87,7 @@ impl LichessClient {
     }
 
     fn play(&self, game_id: &str, color: Color, state: GameState<'_>, engine: &mut chessbot2::Engine) {
-        engine.time_control(match color {
+        engine.time_control(None, match color {
             Color::White => chessbot2::TimeControl {
                 time_left: state.wtime,
                 time_incr: state.winc,
