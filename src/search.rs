@@ -140,7 +140,7 @@ impl Engine {
 
         let in_check = game.board().checkers().0 != 0;
 
-        if ply != 0 && !in_check && depth > 3 && !in_zw {
+        if ply != 0 && !in_check && depth > 3 {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
             let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
