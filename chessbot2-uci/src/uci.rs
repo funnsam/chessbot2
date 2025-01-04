@@ -108,14 +108,14 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
             Some(UciCommand::Go {
                 depth,
                 movetime,
-                wtime: wtime.and_then(|time| winc.map(|inc| TimeControl {
+                wtime: wtime.map(|time| TimeControl {
                     time_left: time,
-                    time_incr: inc,
-                })),
-                btime: btime.and_then(|time| binc.map(|inc| TimeControl {
+                    time_incr: winc.unwrap_or(0),
+                }),
+                btime: btime.map(|time| TimeControl {
                     time_left: time,
-                    time_incr: inc,
-                })),
+                    time_incr: binc.unwrap_or(0),
+                }),
                 movestogo,
             })
         },
