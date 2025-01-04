@@ -17,6 +17,7 @@ pub enum UciCommand<'a> {
         movetime: Option<Duration>,
         wtime: Option<TimeControl>,
         btime: Option<TimeControl>,
+        movestogo: Option<usize>,
     },
     SetOption(&'a str, Option<&'a str>),
     Quit,
@@ -89,6 +90,7 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
             let mut btime = None;
             let mut winc = None;
             let mut binc = None;
+            let mut movestogo = None;
 
             while let Some(t) = token.next() {
                 match t {
@@ -98,6 +100,7 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
                     "btime" => btime = token.next().and_then(|t| t.parse().ok()),
                     "winc" => winc = token.next().and_then(|t| t.parse().ok()),
                     "binc" => binc = token.next().and_then(|t| t.parse().ok()),
+                    "movestogo" => movestogo = token.next().and_then(|t| t.parse().ok()),
                     _ => {},
                 }
             }
@@ -113,6 +116,7 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
                     time_left: time,
                     time_incr: inc,
                 })),
+                movestogo,
             })
         },
         Some("setoption") => {
