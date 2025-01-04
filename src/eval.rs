@@ -21,8 +21,8 @@ impl Eval {
     #[inline]
     pub fn incr_mate(self) -> Self {
         match self.0 as u16 >> 14 {
-            1 => Self(self.0 - 1),
-            2 => Self(self.0 + 1),
+            // 1 => Self(self.0 - 1),
+            // 2 => Self(self.0 + 1),
             _ => self,
         }
     }
@@ -105,9 +105,16 @@ fn test_eval() {
     let m_1 = m_0.incr_mate();
 
     assert_eq!(m0.0, 0x7fff);
+    assert_eq!(m0.to_string(), "#0");
     assert_eq!(m1.0, 0x7ffe);
+    assert_eq!(m1.to_string(), "#1");
     assert_eq!(m_0.0 as u16, 0x8000);
+    assert_eq!(m_0.to_string(), "#-0");
     assert_eq!(m_1.0 as u16, 0x8001);
+    assert_eq!(m_1.to_string(), "#-1");
+
+    let m0 = -m_0;
+    assert_eq!(m0.0, 0x7fff);
 }
 
 /// Mostly PeSTO's evaluation with rook on open file bonus
@@ -154,7 +161,10 @@ pub fn evaluate_static(board: &Board) -> Eval {
     let mg_phase = phase.min(24);
     let eg_phase = 24 - mg_phase;
 
-    Eval(((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / 24) as i16)
+    let eval = Eval(((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / 24) as i16);
+    assert!(!eval.is_mate());
+
+    eval
 }
 
 /// Finds the current phase of the game. 0 is endgame and 24 is midgame.
