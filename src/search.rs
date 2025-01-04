@@ -120,7 +120,7 @@ impl Engine {
         }
 
         if depth == 0 {
-            return (ChessMove::default(), self.quiescence_search(game, alpha, beta), NodeType::Exact);
+            return (ChessMove::default(), self.quiescence_search(game, alpha, beta), NodeType::None);
         }
 
         let killer = KillerTable::new();
