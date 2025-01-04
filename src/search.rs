@@ -10,13 +10,13 @@ impl Engine {
         self.hist_table.clear();
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
+        let prev = self.root_search(1, Eval::MIN, Eval::MAX);
         let mut prev = (prev.0, prev.1, 1);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
         if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
-            let this = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+            let this = self.root_search(depth, Eval::MIN, Eval::MAX);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -24,6 +24,20 @@ impl Engine {
         }
 
         prev
+    }
+
+    #[inline]
+    fn root_search(
+        &self,
+        depth: usize,
+        alpha: Eval,
+        beta: Eval,
+    ) -> (ChessMove, Eval) {
+        let (next, eval, nt) = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, alpha, beta, true);
+
+        self.store_tt(depth, &self.game, (next, eval, nt));
+
+        (next, eval)
     }
 
     #[inline]
@@ -54,6 +68,12 @@ impl Engine {
     ) -> Eval {
         let (next, eval, nt) = self._evaluate_search(prev_move, game, killer, depth, ply, alpha, beta, in_zw);
 
+        self.store_tt(depth, game, (next, eval, nt));
+
+        eval
+    }
+
+    fn store_tt(&self, depth: usize, game: &Game, (next, eval, nt): (ChessMove, Eval, NodeType)) {
         if nt != NodeType::None && !self.times_up() {
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
                 depth: depth as u8,
@@ -62,8 +82,6 @@ impl Engine {
                 next,
             });
         }
-
-        eval
     }
 
     fn _evaluate_search(
@@ -106,6 +124,18 @@ impl Engine {
         }
 
         let killer = KillerTable::new();
+
+        // internal iterative reductions
+        // TODO: is not limiting depth correct? it increases elo for me
+        if ply > 0 /* && depth >= 4 */ && self.trans_table.get(game.board().get_hash()).is_none() {
+            let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, in_zw);
+            self.store_tt(depth / 4, game, low);
+
+            if low.1 <= alpha {
+                return (low.0, low.1, NodeType::None);
+            }
+        }
+
         let in_check = game.board().checkers().0 != 0;
 
         if ply != 0 && !in_check && depth > 3 && !in_zw {
@@ -120,6 +150,7 @@ impl Engine {
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
         self.order_moves(prev_move, &mut moves, game, &p_killer);
+
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let mut best = (ChessMove::default(), Eval::MIN);
