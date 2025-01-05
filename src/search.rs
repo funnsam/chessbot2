@@ -126,26 +126,26 @@ impl Engine {
         let killer = KillerTable::new();
 
         // internal iterative reductions
-        if ply > 0 && depth >= 4 && self.trans_table.get(game.board().get_hash()).is_none() {
-            let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, in_zw);
-            self.store_tt(depth / 4, game, low);
+        // if ply > 0 && depth >= 4 && self.trans_table.get(game.board().get_hash()).is_none() {
+        //     let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, in_zw);
+        //     self.store_tt(depth / 4, game, low);
 
-            if low.1 <= alpha {
-                return (low.0, low.1, NodeType::None);
-            }
-        }
+        //     if low.1 <= alpha {
+        //         return (low.0, low.1, NodeType::None);
+        //     }
+        // }
 
         let in_check = game.board().checkers().0 != 0;
 
-        if ply != 0 && !in_check && depth > 3 && !in_zw {
-            let game = game.make_null_move().unwrap();
-            let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
+        // if ply != 0 && !in_check && depth > 3 && !in_zw {
+        //     let game = game.make_null_move().unwrap();
+        //     let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
+        //     let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
 
-            if eval >= beta {
-                return (ChessMove::default(), eval.incr_mate(), NodeType::None);
-            }
-        }
+        //     if eval >= beta {
+        //         return (ChessMove::default(), eval.incr_mate(), NodeType::None);
+        //     }
+        // }
 
         let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
         self.order_moves(prev_move, &mut moves, game, &p_killer);
@@ -160,18 +160,18 @@ impl Engine {
             let this_depth = if depth < 3 || in_check || i < 1 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential
-            if !in_check && depth <= 2 {
-                let eval = -evaluate_static(game.board());
-                let margin = 100 * depth as i16 * depth as i16  ;
+            // if !in_check && depth <= 2 {
+            //     let eval = -evaluate_static(game.board());
+            //     let margin = 100 * depth as i16 * depth as i16  ;
 
-                if eval.0 + margin < alpha.0 {
-                    if best.0 == ChessMove::default() {
-                        best = (m, Eval(eval.0 - margin));
-                    }
+            //     if eval.0 + margin < alpha.0 {
+            //         if best.0 == ChessMove::default() {
+            //             best = (m, Eval(eval.0 - margin));
+            //         }
 
-                    continue;
-                }
-            }
+            //         continue;
+            //     }
+            // }
 
             let mut eval = -self.evaluate_search(m, &game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
