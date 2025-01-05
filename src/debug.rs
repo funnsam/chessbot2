@@ -31,7 +31,7 @@ impl RelaxedCounter {
 }
 
 macro_rules! debugs {
-    ($($name:ident),*) => {
+    ($($name:ident),* $(,)?) => {
         #[derive(Debug, Clone, Default)]
         pub struct DebugStats {
             $(pub $name: RelaxedCounter,)*
@@ -39,4 +39,10 @@ macro_rules! debugs {
     };
 }
 
-debugs!(no_research, researched, full);
+debugs!(
+    no_research,
+    research,
+    all_full_zw,
+    full,
+    all_full,
+);
