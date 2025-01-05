@@ -5,6 +5,7 @@ pub use see::see;
 use std::time::*;
 use std::sync::{atomic::*, RwLock};
 
+mod debug;
 mod eval;
 pub mod game;
 mod move_order;
@@ -23,8 +24,10 @@ pub struct Engine {
     time_usable: RwLock<Duration>,
     can_time_out: AtomicBool,
 
-    nodes_searched: core::sync::atomic::AtomicUsize,
+    nodes_searched: AtomicUsize,
     // search_done: AtomicBool,
+
+    debug: debug::DebugStats,
 }
 
 impl Engine {
@@ -41,6 +44,8 @@ impl Engine {
 
             nodes_searched: AtomicUsize::new(0),
             // search_done: AtomicBool::new(false),
+
+            debug: debug::DebugStats::default(),
         }
     }
 

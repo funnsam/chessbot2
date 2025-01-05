@@ -115,6 +115,15 @@ fn test_eval() {
 
     let m0 = -m_0;
     assert_eq!(m0.0, 0x7fff);
+
+    assert_eq!(--m0, m0);
+    assert_eq!(--m1, m1);
+    assert_eq!(--m_0, m_0);
+    assert_eq!(--m_1, m_1);
+    assert_eq!(-m0, m_0);
+    assert_eq!(-m1, m_1);
+    assert_eq!(-m_0, m0);
+    assert_eq!(-m_1, m1);
 }
 
 /// Mostly PeSTO's evaluation with rook on open file bonus
