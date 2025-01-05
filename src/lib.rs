@@ -65,20 +65,22 @@ impl Engine {
         self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
     }
 
-    pub fn time_control(&self, time_ctrl: TimeControl) {
-        // https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V2-UCI/Chess-Coding-Adventure/src/Bot.cs#L64
-
+    pub fn time_control(&self, moves_to_go: Option<usize>, time_ctrl: TimeControl) {
         let left = time_ctrl.time_left as u64;
         let incr = time_ctrl.time_incr as u64;
 
-        let mut think_time = left / 40;
+        *self.time_usable.write().unwrap() = Duration::from_millis(if let Some(mtg) = moves_to_go {
+            left / mtg as u64 + incr
+        } else {
+            let mut think_time = left / 40;
 
-        if left > incr << 2 {
-            think_time += incr * 4 / 5;
-        }
+            if left > incr << 2 {
+                think_time += incr * 4 / 5;
+            }
 
-        let min_think = (left / 4).min(50);
-        *self.time_usable.write().unwrap() = Duration::from_millis(min_think.max(think_time));
+            let min_think = (left / 4).min(50);
+            min_think.max(think_time)
+        });
     }
 
     pub fn allow_for(&self, time: Duration) {

@@ -50,3 +50,21 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
 
     pub fn size(&self) -> usize { self.inner.len() }
 }
+
+#[test]
+fn test_shared_table() {
+    let st = std::sync::Arc::new(SharedHashTable::<usize>::new(10));
+
+    st.insert(0, 123);
+    assert_eq!(st.get(0), Some(123));
+    st.insert(10, 123);
+    assert_eq!(st.get(10), Some(123));
+    assert_eq!(st.get(0), None);
+
+    {
+        let st = std::sync::Arc::clone(&st);
+        std::thread::spawn(move || st.insert(1, 789)).join().unwrap();
+    }
+
+    assert_eq!(st.get(1), Some(789));
+}
