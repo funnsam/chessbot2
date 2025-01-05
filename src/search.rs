@@ -126,8 +126,7 @@ impl Engine {
         let killer = KillerTable::new();
 
         // internal iterative reductions
-        // TODO: is not limiting depth correct? it increases elo for me
-        if ply > 0 /* && depth >= 4 */ && self.trans_table.get(game.board().get_hash()).is_none() {
+        if ply > 0 && depth >= 4 && self.trans_table.get(game.board().get_hash()).is_none() {
             let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, in_zw);
             self.store_tt(depth / 4, game, low);
 
