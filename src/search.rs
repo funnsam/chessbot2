@@ -226,7 +226,7 @@ impl Engine {
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         for m in moves {
-            if see(game, m) < 0 { continue };
+            // if see(game, m) < 0 { continue };
 
             let game = game.make_move(m);
             let eval = -self.quiescence_search(&game, -beta, -alpha);
