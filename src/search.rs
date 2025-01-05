@@ -16,7 +16,7 @@ impl Engine {
         if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
-            let this = self.root_search(depth, Eval::MIN, Eval::MAX);
+            let this = self.root_aspiration(depth, prev.1);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -24,6 +24,15 @@ impl Engine {
         }
 
         prev
+    }
+
+    fn root_aspiration(&self, depth: usize, prev: Eval) -> (ChessMove, Eval) {
+        let (alpha, beta) = (Eval(prev.0 - 25), Eval(prev.0 + 25));
+        let eval = self.root_search(depth, alpha, beta);
+
+        if !(alpha <= eval.1 && eval.1 <= beta) {
+            self.root_search(depth, Eval::MIN, Eval::MAX)
+        } else { eval }
     }
 
     #[inline]
