@@ -207,11 +207,11 @@ impl Engine {
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                if _game.board().piece_on(m.get_dest()).is_none() {
+                if !_game.is_capture(m) {
                     let bonus = 300 * depth as isize - 250;
 
                     for (m, _) in moves[..i].into_iter() {
-                        if _game.board().piece_on(m.get_dest()).is_none() {
+                        if !_game.is_capture(*m) {
                             self.hist_table.update(*m, -bonus);
                             p_killer.update(*m, -bonus);
                         }
