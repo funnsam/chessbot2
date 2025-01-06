@@ -157,14 +157,18 @@ impl Engine {
             }
         }
 
-        let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
-        self.order_moves(prev_move, &mut moves, game, &p_killer);
+        let tte = self.trans_table.get(game.board().get_hash());
+
+        let mut moves = MoveGen::new_legal(game.board())
+            .map(|m| (m, self.move_score(prev_move, &tte, m, game, &p_killer)))
+            .collect::<arrayvec::ArrayVec<_, 256>>();
+        moves.sort_unstable_by_key(|i| -i.1);
 
         self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         let mut best = (ChessMove::default(), Eval::MIN);
         let _game = &game;
-        for (i, m) in moves.iter().copied().enumerate() {
+        for (i, (m, _)) in moves.iter().copied().enumerate() {
             let game = _game.make_move(m);
 
             let this_depth = if depth < 3 || in_check || i < 1 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
@@ -206,7 +210,7 @@ impl Engine {
                 if _game.board().piece_on(m.get_dest()).is_none() {
                     let bonus = 300 * depth as isize - 250;
 
-                    for m in moves[..i].into_iter() {
+                    for (m, _) in moves[..i].into_iter() {
                         if _game.board().piece_on(m.get_dest()).is_none() {
                             self.hist_table.update(*m, -bonus);
                             p_killer.update(*m, -bonus);
