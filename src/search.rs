@@ -28,7 +28,7 @@ impl Engine {
     }
 
     fn root_aspiration(&self, depth: usize, prev: Eval) -> (ChessMove, Eval) {
-        let (alpha, beta) = (Eval(prev.0 - 25), Eval(prev.0 + 25));
+        let (alpha, beta) = (prev - 25, prev + 25);
         let eval = self.root_search(depth, alpha, beta);
 
         if !(alpha <= eval.1 && eval.1 <= beta) {
@@ -186,20 +186,19 @@ impl Engine {
             //     }
             // }
 
-            // let can_reduce = depth >= 3 && !in_check && real_i != 0;
-            let can_reduce = false && !in_check && real_i != 0;
+            let can_reduce = depth >= 3 && !in_check && real_i != 0;
 
             let mut eval = Eval(i16::MIN);
             let do_full_research = if can_reduce {
                 eval = -self.zw_search(m, &game, &killer, depth / 2, ply + 1, -alpha);
 
-                if alpha < eval && eval < beta && depth / 2 < depth - 1 {
+                if alpha < eval && depth / 2 < depth - 1 {
                     self.debug.research.inc();
                 } else {
                     self.debug.no_research.inc();
                 }
 
-                alpha < eval && eval < beta && depth / 2 < depth - 1
+                alpha < eval && depth / 2 < depth - 1
             } else {
                 !is_pv || real_i != 0
             };
@@ -209,7 +208,6 @@ impl Engine {
                 self.debug.all_full_zw.inc();
             }
 
-            // if is_pv && (real_i == 0 || (alpha < eval && eval < beta)) {
             if is_pv && (real_i == 0 || alpha < eval) {
                 eval = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw, true);
 
@@ -221,9 +219,9 @@ impl Engine {
 
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None) };
 
-            if ply == 0 {
-                println!(" {m} {eval} {can_reduce} {do_full_research} {:?}", self.find_pv(m, 100).into_iter().map(|i| i.to_string()).collect::<Vec<_>>());
-            }
+            // if ply == 0 {
+            //     println!(" {m} {eval} {can_reduce} {do_full_research} {:?}", self.find_pv(m, 100).into_iter().map(|i| i.to_string()).collect::<Vec<_>>());
+            // }
 
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
