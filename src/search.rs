@@ -8,7 +8,7 @@ impl Engine {
         *self.time_ref.write().unwrap() = Instant::now();
         self.nodes_searched.store(0, Ordering::Relaxed);
         self.hist_table.clear();
-        // self.countermove.clear();
+        self.countermove.clear();
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
         let prev = self.root_search(1, Eval::MIN, Eval::MAX);
