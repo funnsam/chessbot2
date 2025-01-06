@@ -16,7 +16,7 @@ impl Engine {
         if !cont(self, prev.clone()) { return prev };
 
         for depth in 2..=255 {
-            let this = self.root_search(depth, Eval::MIN, Eval::MAX);
+            let this = self.root_aspiration(depth, prev.1);
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
@@ -24,6 +24,15 @@ impl Engine {
         }
 
         prev
+    }
+
+    fn root_aspiration(&self, depth: usize, prev: Eval) -> (ChessMove, Eval) {
+        let (alpha, beta) = (Eval(prev.0 - 25), Eval(prev.0 + 25));
+        let eval = self.root_search(depth, alpha, beta);
+
+        if !(alpha <= eval.1 && eval.1 <= beta) {
+            self.root_search(depth, Eval::MIN, Eval::MAX)
+        } else { eval }
     }
 
     #[inline]
@@ -157,8 +166,6 @@ impl Engine {
         for (i, m) in moves.iter().copied().enumerate() {
             let game = _game.make_move(m);
 
-            let this_depth = if depth < 3 || in_check || i < 1 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
-
             // futility pruning: kill nodes with no potential
             // if !in_check && depth <= 2 {
             //     let eval = -evaluate_static(game.board());
@@ -173,16 +180,8 @@ impl Engine {
             //     }
             // }
 
-            let mut eval = -self.evaluate_search(m, &game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw);
+            let mut eval = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
             if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
-
-            if this_depth < depth - 1 && best.1 < eval {
-                let new = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
-
-                if !self.times_up() {
-                    eval = new;
-                }
-            }
 
             // if ply == 0 {
             //     println!(" {m} {eval} {:?}", self.find_pv(m, 100).into_iter().map(|i| i.to_string()).collect::<Vec<_>>());
