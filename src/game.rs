@@ -18,6 +18,10 @@ impl Game {
 
     pub fn board(&self) -> &chess::Board { &self.board }
 
+    pub fn is_capture(&self, mov: chess::ChessMove) -> bool {
+        self.board().piece_on(mov.get_dest()).is_some()
+    }
+
     pub fn make_move(&self, mov: chess::ChessMove) -> Self {
         let mut fifty_move_counter = self.fifty_move_counter + 1;
 
