@@ -28,7 +28,7 @@ impl Engine {
     }
 
     fn root_aspiration(&self, depth: usize, prev: Eval) -> (ChessMove, Eval) {
-        let (alpha, beta) = (Eval(prev.0 - 25), Eval(prev.0 + 25));
+        let (alpha, beta) = (prev - 25, prev + 25);
         let eval = self.root_search(depth, alpha, beta);
 
         if !(alpha <= eval.1 && eval.1 <= beta) {
@@ -150,7 +150,7 @@ impl Engine {
         if ply != 0 && !in_check && depth > 3 && !in_zw {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
+            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
 
             if eval >= beta {
                 return (ChessMove::default(), eval.incr_mate(), NodeType::None);
@@ -180,7 +180,7 @@ impl Engine {
 
                 if eval.0 + margin < alpha.0 {
                     if best.0 == ChessMove::default() {
-                        best = (m, Eval(eval.0 - margin));
+                        best = (m, eval - margin);
                     }
 
                     continue;

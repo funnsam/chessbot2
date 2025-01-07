@@ -38,6 +38,33 @@ impl Eval {
     }
 }
 
+impl core::ops::Add<i16> for Eval {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, rhs: i16) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl core::ops::Sub<i16> for Eval {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, rhs: i16) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
+impl core::ops::Sub<Eval> for i16 {
+    type Output = Eval;
+
+    #[inline]
+    fn sub(self, rhs: Eval) -> Self::Output {
+        Eval(self - rhs.0)
+    }
+}
+
 impl core::ops::Neg for Eval {
     type Output = Self;
 
@@ -78,9 +105,25 @@ fn test_eval() {
     let m_1 = m_0.incr_mate();
 
     assert_eq!(m0.0, 0x7fff);
+    assert_eq!(m0.to_string(), "#0");
     assert_eq!(m1.0, 0x7ffe);
+    assert_eq!(m1.to_string(), "#1");
     assert_eq!(m_0.0 as u16, 0x8000);
+    assert_eq!(m_0.to_string(), "#-0");
     assert_eq!(m_1.0 as u16, 0x8001);
+    assert_eq!(m_1.to_string(), "#-1");
+
+    let m0 = -m_0;
+    assert_eq!(m0.0, 0x7fff);
+
+    assert_eq!(--m0, m0);
+    assert_eq!(--m1, m1);
+    assert_eq!(--m_0, m_0);
+    assert_eq!(--m_1, m_1);
+    assert_eq!(-m0, m_0);
+    assert_eq!(-m1, m_1);
+    assert_eq!(-m_0, m0);
+    assert_eq!(-m_1, m1);
 }
 
 /// Mostly PeSTO's evaluation with rook on open file bonus
