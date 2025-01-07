@@ -25,7 +25,6 @@ pub struct Engine {
     can_time_out: AtomicBool,
 
     nodes_searched: AtomicUsize,
-    // search_done: AtomicBool,
 
     debug: debug::DebugStats,
 }
@@ -43,7 +42,6 @@ impl Engine {
             can_time_out: AtomicBool::new(true),
 
             nodes_searched: AtomicUsize::new(0),
-            // search_done: AtomicBool::new(false),
 
             debug: debug::DebugStats::default(),
         }
