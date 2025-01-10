@@ -6,7 +6,7 @@ use move_order::KillerTable;
 impl Engine {
     pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
         *self.time_ref.write().unwrap() = Instant::now();
-        self.nodes_searched.store(0, Ordering::Relaxed);
+        self.debug.reset();
         self.hist_table.clear();
         self.countermove.clear();
 
@@ -164,8 +164,6 @@ impl Engine {
             .collect::<arrayvec::ArrayVec<_, 256>>();
         moves.sort_unstable_by_key(|i| -i.1);
 
-        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
-
         let mut best = (ChessMove::default(), Eval::MIN);
         let _game = &game;
         for (i, (m, _)) in moves.iter().copied().enumerate() {
@@ -175,7 +173,7 @@ impl Engine {
 
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
-                let eval = -evaluate_static(game.board());
+                let eval = -self.eval_params.evaluate_static(game.board());
                 let margin = 100 * depth as i16 * depth as i16  ;
 
                 if eval.0 + margin < alpha.0 {
@@ -201,6 +199,8 @@ impl Engine {
             // if ply == 0 {
             //     println!(" {m} {eval} {:?}", self.find_pv(m, 100).into_iter().map(|i| i.to_string()).collect::<Vec<_>>());
             // }
+
+            self.debug.nodes.inc();
 
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
@@ -230,20 +230,20 @@ impl Engine {
     }
 
     fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
-        let standing_pat = evaluate_static(game.board());
+        let standing_pat = -self.eval_params.evaluate_static(game.board());
         if standing_pat >= beta { return beta; }
         alpha = alpha.max(standing_pat);
         let mut best = standing_pat;
 
         let mut moves = MoveGen::new_legal(game.board());
         moves.set_iterator_mask(*game.board().combined());
-        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         for m in moves {
             if see(game, m) < 0 { continue };
 
             let game = game.make_move(m);
             let eval = -self.quiescence_search(&game, -beta, -alpha);
+            self.debug.nodes.inc();
 
             if eval > best {
                 best = eval;

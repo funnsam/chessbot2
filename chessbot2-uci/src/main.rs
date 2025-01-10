@@ -64,7 +64,7 @@ fn main() {
             Some(uci::UciCommand::Eval) => println!(
                 "{:#}Eval: {}",
                 engine.game,
-                evaluate_static(engine.game.board()),
+                engine.eval_params.evaluate_static(engine.game.board()),
             ),
             Some(uci::UciCommand::Move(m)) => engine.game = engine.game.make_move(m),
             Some(uci::UciCommand::Bench) => {

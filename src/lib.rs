@@ -1,4 +1,4 @@
-pub use eval::{Eval, evaluate_static};
+pub use eval::Eval;
 pub use game::Game;
 pub use see::see;
 
@@ -13,6 +13,7 @@ mod search;
 mod see;
 mod shared_table;
 mod trans_table;
+mod tune;
 
 pub struct Engine {
     pub game: Game,
@@ -24,9 +25,9 @@ pub struct Engine {
     time_usable: RwLock<Duration>,
     can_time_out: AtomicBool,
 
-    nodes_searched: AtomicUsize,
-
     debug: debug::DebugStats,
+
+    pub eval_params: eval::EvalParams,
 }
 
 impl Engine {
@@ -41,9 +42,9 @@ impl Engine {
             time_usable: Duration::default().into(),
             can_time_out: AtomicBool::new(true),
 
-            nodes_searched: AtomicUsize::new(0),
-
             debug: debug::DebugStats::default(),
+
+            eval_params: eval::EvalParams::default(),
         }
     }
 
@@ -114,7 +115,7 @@ impl Engine {
     }
 
     pub fn nodes(&self) -> usize {
-        self.nodes_searched.load(Ordering::Relaxed)
+        self.debug.nodes.get()
     }
 
     pub fn elapsed(&self) -> Duration {
