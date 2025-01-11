@@ -128,39 +128,67 @@ fn test_eval() {
 
 pub type EvalParams = EvalParamList<i16>;
 
-pub struct EvalParamList<T> {
-    pub pst_mid: [T; 64 * 6],
-    pub pst_end: [T; 64 * 6],
-    pub king_pawn_penalty: T,
-    pub king_open_file_penalty: T,
-}
+macro_rules! eval_param_list {
+    (s $($name:tt : $ty:tt),* $(,)?) => {
+        pub struct EvalParamList<T>([T; 0 $(+ eval_param_list!(sizeof $ty))*]);
 
-impl<T: From<i16>> Default for EvalParamList<T> {
-    fn default() -> Self {
-        let s = EvalParams::default();
+        impl<T: Copy> EvalParamList<T> {
+            const _SIZES: &[usize] = &[$(eval_param_list!(sizeof $ty)),*];
 
-        Self {
-            pst_mid: core::array::from_fn(|i| s.pst_mid[i].into()),
-            pst_end: core::array::from_fn(|i| (params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]).into()),
+            pub fn new($($name: eval_param_list!(typeof $ty)),*) -> Self {
+                Self([$(eval_param_list!(to_arr $ty $name)),*].concat().try_into().unwrap_or_else(|_| panic!()))
+            }
 
-            king_pawn_penalty: s.king_pawn_penalty.into(),
-            king_open_file_penalty: s.king_open_file_penalty.into(),
+            eval_param_list!(getfn 0, $($name $ty),*);
         }
-    }
+    };
+    (getfn $i:expr, $name:tt $ty:tt, $($r:tt)*) => {
+        eval_param_list!(getfn $i, $name $ty);
+        eval_param_list!(getfn $i + 1, $($r)*);
+    };
+    (getfn $i:expr, $name:tt $ty:tt) => {
+        pub fn $name(&self) -> eval_param_list!(typeof $ty) {
+            eval_param_list!(get $ty &self.0[Self::_SIZES[..$i].iter().sum()..])
+        }
+    };
+    (sizeof pst) => { (6 * 64) };
+    (typeof pst) => { &[T; 6 * 64] };
+    (get pst $i:expr) => { (&$i[..6 * 64]).try_into().unwrap() };
+    (to_arr pst $i:expr) => { <&[T] as Into<&[T]>>::into($i) };
+    (sizeof single) => { 1 };
+    (typeof single) => { T };
+    (get single $i:expr) => { $i[0] };
+    (to_arr single $i:expr) => { <&[T] as Into<&[T]>>::into(&[$i]) };
+    (sizeof $size:tt) => { $size };
+    (typeof $size:tt) => { &[T; $size] };
+    (get $size:tt $i:expr) => { (&$i[..$size]).try_into().unwrap() };
+    (to_arr $_size:tt $i:expr) => { <&[T] as Into<&[T]>>::into($i) };
 }
+
+eval_param_list!(s
+    pst_mid: pst,
+    pst_end: pst,
+    king_pawn_penalty: single,
+    king_open_file_penalty: single,
+);
 
 impl Default for EvalParams {
     fn default() -> Self {
-        Self {
-            pst_mid: core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_MID[i] + params::PIECE_VALUE_MID[i / 64]),
-            pst_end: core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]),
+        let pst_mid = core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_MID[i] + params::PIECE_VALUE_MID[i / 64]);
+        let pst_end = core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]);
+        let king_pawn_penalty = 15;
+        let king_open_file_penalty = 5;
 
-            king_pawn_penalty: 15,
-            king_open_file_penalty: 5,
-        }
+        Self::new(&pst_mid, &pst_end, king_pawn_penalty, king_open_file_penalty)
     }
 }
 
+impl Default for EvalParamList<f32> {
+    fn default() -> Self {
+        let s = EvalParams::default();
+        Self(core::array::from_fn(|i| s.0[i] as f32))
+    }
+}
 impl EvalParams {
     /// Mostly PeSTO's evaluation with rook on open file bonus
     pub fn evaluate_static(&self, board: &Board) -> Eval {
@@ -189,14 +217,14 @@ impl EvalParams {
                 let king_center = square.uforward(color);
                 let king_pawns = (board.pieces(Piece::Pawn) & (chess::get_king_moves(king_center) | BitBoard::from_square(king_center))).popcnt();
 
-                -(3_i16.saturating_sub(king_pawns as i16) * self.king_pawn_penalty + open_files * self.king_open_file_penalty)
+                -(3_i16.saturating_sub(king_pawns as i16) * self.king_pawn_penalty() + open_files * self.king_open_file_penalty())
             } else { 0 };
 
             let xor = if color == Color::Black { 0b111_000 } else { 0 };
             let idx = (square.to_index() ^ xor) | (piece.to_index() << 6);
 
-            mid_game[color.to_index()] += rook_on_open_file + pawn_shield + self.pst_mid[idx];
-            end_game[color.to_index()] += rook_on_open_file + self.pst_end[idx];
+            mid_game[color.to_index()] += rook_on_open_file + pawn_shield + self.pst_mid()[idx];
+            end_game[color.to_index()] += rook_on_open_file + self.pst_end()[idx];
             phase += PIECE_PHASE[piece.to_index()];
         }
 

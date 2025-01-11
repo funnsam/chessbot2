@@ -11,9 +11,9 @@ pub mod game;
 mod move_order;
 mod search;
 mod see;
+mod selfplay;
 mod shared_table;
 mod trans_table;
-mod tune;
 
 pub struct Engine {
     pub game: Game,
