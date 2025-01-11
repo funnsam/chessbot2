@@ -1,193 +1,101 @@
+#![warn(clippy::future_not_send)]
+
 use core::str::FromStr;
 use std::sync::{atomic::*, Arc};
-use chess::*;
-use reqwest::*;
+use api::{move_from_uci, Challenge, Direction, Event, GameEvent, GameState, LichessApi, Player, Speed, Variant};
+use chess::{Board, Color};
+use chessbot2::Game;
 
-#[macro_use]
+mod api;
 mod log;
 
-const DISALLOWED_TIME_CONTROLS: &[&str] = &["correspondence", "classical"];
+const DISALLOWED_TIME_CONTROLS: &[Speed] = &[Speed::Correspondence, Speed::Classical];
 const EXCEPTION_USERS: &[&str] = &["funnsam"];
 const ACCEPT_RATED: bool = false;
 
 pub struct LichessClient {
-    api_token: String,
+    api: LichessApi,
     pub active_games: AtomicUsize,
 }
 
 impl LichessClient {
-    fn new(api_token: String) -> Self {
-        Self { api_token, active_games: AtomicUsize::new(0) }
-    }
-
-    fn client(&self) -> Client {
-        let mut headers = header::HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            header::HeaderValue::from_str(
-                &format!("Bearer {}", self.api_token)
-            ).unwrap()
-        );
-        Client::builder()
-            .default_headers(headers)
-            // .connection_verbose(true)
-            .build().unwrap()
-    }
-
-    fn http<F: Fn(&Client) -> Request>(&self, f: F) -> impl Future<Output = Result<Response>> {
-        let client = self.client();
-        client.execute(f(&client))
+    pub fn new(api: LichessApi) -> Self {
+        Self { api, active_games: AtomicUsize::new(0) }
     }
 
     pub async fn listen(self: Arc<Self>) {
-        let stream = self.http(|c| c
-            .get("https://lichess.org/api/stream/event")
-            .build().unwrap()
-        ).await.unwrap().bytes_stream();
-        let mut stream = NdJsonIter::new(stream);
+        self.api.listen(|event| match event {
+            Event::Challenge { challenge: Challenge { direction, id, challenger: Player { name: Some(challenger), .. }, variant: Variant { key: variant }, speed, rated } } => {
+                if direction == Some(Direction::Out) { return };
+                let is_su = EXCEPTION_USERS.contains(&challenger);
 
-        info!("starting to listen for incoming games");
+                info!("user `{challenger}` challenged bot (id: `{id}`, variant: {variant:?}, time control: {speed:?}, rated: {rated})");
+                if !is_su && variant != "standard" {
+                    self.api.decline_challenge(id, "standard");
+                } else if !is_su && DISALLOWED_TIME_CONTROLS.contains(&speed) {
+                    self.api.decline_challenge(id, "timeControl");
+                } else if !is_su && !ACCEPT_RATED && rated {
+                    self.api.decline_challenge(id, "casual");
+                } else {
+                    // self.api.accept_challenge(id).await;
+                }
+            },
+            Event::GameStart { game: api::Game { id, color, fen, opponent, .. } } => {
+                let game = chessbot2::Game::from_str(fen).unwrap();
 
-        while let Some(event) = stream.next_json().await {
-            match event["type"].as_str() {
-                Some("challenge") => {
-                    let challenge = &event["challenge"];
+                info!("started a game with `{}` (id: `{id}`, fen: `{fen}`)", opponent.username.unwrap());
 
-                    if challenge["direction"] == "out" { continue };
-
-                    let id = challenge["id"].as_str().unwrap();
-                    let user = challenge["challenger"]["name"].as_str().unwrap();
-
-                    let variant = challenge["variant"]["key"].as_str().unwrap();
-                    let time_ctrl = challenge["speed"].as_str().unwrap();
-                    let is_rated = challenge["rated"].as_bool().unwrap();
-                    let is_su = EXCEPTION_USERS.contains(&user);
-
-                    macro_rules! decline {
-                        ($reason:tt) => {
-                            if self.http(|c| c
-                                .post(format!("https://lichess.org/api/challenge/{id}/decline"))
-                                .body(concat!("reason=", stringify!($reason)))
-                                .build().unwrap()
-                            ).await.ok().and_then(|a| a.status().is_success().then(|| ())).is_none() {
-                                warn!("failed to decline challenge id {}", id);
-                            }
-                        };
-                    }
-
-                    info!("user `{}` challenged bot (id: `{}`, variant: {variant}, time control: {time_ctrl}, rated: {is_rated})", user, id);
-                    if !is_su && variant != "standard" {
-                        decline!(standard);
-                    } else if !is_su && DISALLOWED_TIME_CONTROLS.contains(&time_ctrl) {
-                        decline!(timeControl);
-                    } else if !is_su && !ACCEPT_RATED && is_rated {
-                        decline!(casual);
-                    } else {
-                        if self.http(|c| c
-                            .post(format!("https://lichess.org/api/challenge/{id}/accept"))
-                            .build().unwrap()
-                        ).await.ok().and_then(|a| a.status().is_success().then(|| ())).is_none() {
-                            warn!("failed to accept challenge id {}", id);
-                        }
-                    }
-                },
-                Some("gameStart") => {
-                    let game = &event["game"];
-                    let id = game["id"].as_str().unwrap().to_string();
-                    let user = game["opponent"]["username"].as_str().unwrap();
-                    let color = match game["color"].as_str() {
-                        Some("black") => Color::Black,
-                        Some("white") => Color::White,
-                        v => {
-                            warn!("unknown color `{:?}`", v);
-                            continue;
-                        },
-                    };
-                    let fen = game["fen"].as_str().unwrap();
-                    let game = chessbot2::Game::from_str(fen).unwrap();
-
-                    info!("started a game with `{}` (id: `{}`, fen: `{}`)", user, id, fen);
-
-                    let arc = Arc::clone(&self);
-                    tokio::spawn(async move { arc.play_game(id, game, color).await });
-                },
-                Some("gameFinish") => {
-                    self.active_games.fetch_sub(1, Ordering::Relaxed);
-                },
-                Some("challengeCanceled" | "challengeDeclined") => {},
-                Some(typ) => {
-                    warn!("got unknown type of event `{}`", typ);
-                    dbg!("{:?}", event);
-                },
-                None => {
-                    warn!("got unknown type of event");
-                    dbg!("{:?}", event);
-                },
-            }
-        }
+                let arc = Arc::clone(&self);
+                let id = id.to_string();
+                std::thread::spawn(move || arc.play_game(id, game, color.0));
+            },
+            Event::GameFinish { game } => {
+                self.active_games.fetch_sub(1, Ordering::Relaxed);
+                dbg!("{game:?}");
+            },
+            _ => dbg!("{event:?}"),
+        });
     }
 
-    async fn play_game(self: Arc<Self>, game_id: String, game: chessbot2::Game, color: Color) {
+    fn play_game(self: Arc<Self>, game_id: String, game: chessbot2::Game, color: Color) {
         let mut engine = chessbot2::Engine::new(game, 64 * 1024 * 1024);
 
-        let color_prefix = if matches!(color, Color::White) { 'w' } else { 'b' };
+        self.api.listen_game(&game_id, |event| match event {
+            GameEvent::GameFull { initial_fen, state } => {
+                engine.game = Game::new(Board::from_str(initial_fen).unwrap_or_default());
+                for m in state.moves.split_whitespace() {
+                    engine.game = engine.game.make_move(move_from_uci(m));
+                }
 
-        let stream = self.http(|c| c
-            .get(format!("https://lichess.org/api/bot/game/stream/{game_id}"))
-            .build().unwrap()
-        ).await.unwrap().bytes_stream();
-        let mut stream = NdJsonIter::new(stream);
+                if engine.game.board().side_to_move() == color {
+                    self.play(&game_id, color, state, &mut engine);
+                }
+            },
+            GameEvent::GameState { state } => {
+                if let Some(m) = state.moves.split_whitespace().last() {
+                    engine.game = engine.game.make_move(move_from_uci(m));
+                }
 
-        while let Some(event) = stream.next_json().await {
-            match event["type"].as_str() {
-                Some("gameFull") => {
-                    let state = &event["state"];
-
-                    // let moves = state["moves"].as_str().unwrap().split_whitespace();
-                    // for m in moves.into_iter().skip(engine.game.history_len()) {
-                    //     engine.game.make_move(move_from_uci(m));
-                    // }
-
-                    if let Some(m) = event["moves"].as_str().and_then(|m| m.split_whitespace().last()) {
-                        engine.game = engine.game.make_move(move_from_uci(m));
-                    }
-
-                    if engine.game.board().side_to_move() == color {
-                        self.play(&game_id, color_prefix, &state, &mut engine).await;
-                    }
-                },
-                Some("gameState") => {
-                    if let Some(m) = event["moves"].as_str().and_then(|m| m.split_whitespace().last()) {
-                        engine.game = engine.game.make_move(move_from_uci(m));
-                    }
-
-
-                    if engine.game.board().side_to_move() == color {
-                        self.play(&game_id, color_prefix, &event, &mut engine).await;
-                    }
-                },
-                Some("chatLine") => {},
-                Some(typ) => {
-                    warn!("got unknown type of event `{}`", typ);
-                    dbg!("{:?}", event);
-                },
-                None => {
-                    warn!("got unknown type of event");
-                    dbg!("{:?}", event);
-                },
-            }
-        }
+                if engine.game.board().side_to_move() == color {
+                    self.play(&game_id, color, state, &mut engine);
+                }
+            },
+            _ => dbg!("{event:?}"),
+        });
 
         info!("stream ended (id: `{}`)", game_id);
     }
 
-    async fn play(&self, game_id: &str, color_prefix: char, state: &json::JsonValue, engine: &mut chessbot2::Engine) {
-        let time = state[color_prefix.to_string() + "time"].as_usize().unwrap();
-        let inc = state[color_prefix.to_string() + "inc"].as_usize().unwrap();
-
-        engine.time_control(chessbot2::TimeControl {
-            time_left: time,
-            time_incr: inc,
+    fn play(&self, game_id: &str, color: Color, state: GameState<'_>, engine: &mut chessbot2::Engine) {
+        engine.time_control(None, match color {
+            Color::White => chessbot2::TimeControl {
+                time_left: state.wtime,
+                time_incr: state.winc,
+            },
+            Color::Black => chessbot2::TimeControl {
+                time_left: state.btime,
+                time_incr: state.binc,
+            },
         });
 
         let (next, _, _) = engine.best_move(|engine, (best, eval, depth)| {
@@ -204,102 +112,11 @@ impl LichessClient {
             );
             true
         });
-        self.send_move(game_id, next).await;
-    }
-
-    async fn send_move(&self, game_id: &str, m: ChessMove) {
-        loop {
-            let client = Client::new();
-            if let Ok(resp) = client.execute(
-                client
-                .post(format!("https://lichess.org/api/bot/game/{game_id}/move/{m}"))
-                .header("Authorization", format!("Bearer {}", self.api_token))
-                .build().unwrap()
-            ).await {
-                if !resp.status().is_success() {
-                    let reason = json::parse(&resp.text().await.unwrap()).unwrap();
-                    let reason = reason["error"].as_str().unwrap();
-                    warn!("move {} invalid ({})", m, reason);
-                }
-
-                break;
-            }
-        }
+        self.api.send_move(game_id, next);
     }
 }
 
-struct NdJsonIter<S: Send + futures_util::stream::Stream<Item = Result<bytes::Bytes>>> {
-    stream: S,
-    buffer: Vec<u8>,
-    leftover: Vec<u8>,
-}
-
-impl<S: Send + futures_util::stream::Stream<Item = Result<bytes::Bytes>> + std::marker::Unpin> NdJsonIter<S> {
-    fn new(stream: S) -> Self {
-        Self {
-            stream,
-            buffer: Vec::new(),
-            leftover: Vec::new(),
-        }
-    }
-
-    async fn next_json(&mut self) -> Option<json::JsonValue> {
-        self.buffer.clear();
-
-        let mut used = 0;
-        let mut done = false;
-        for b in self.leftover.iter() {
-            used += 1;
-            if *b != b'\n' {
-                self.buffer.push(*b);
-            } else if !self.buffer.is_empty() {
-                done = true;
-                break;
-            }
-        }
-
-        self.leftover = self.leftover[used..].to_vec();
-
-        if done {
-            return json::parse(std::str::from_utf8(&self.buffer).ok()?).ok();
-        }
-
-        use futures_util::stream::StreamExt;
-        'a: while let Some(Ok(i)) = self.stream.next().await {
-            for (j, b) in i.iter().enumerate() {
-                if *b != b'\n' {
-                    self.buffer.push(*b);
-                } else if !self.buffer.is_empty() {
-                    self.leftover.extend(&i[j..]);
-                    break 'a;
-                } else { std::hint::black_box(()); }
-            }
-
-        }
-        json::parse(std::str::from_utf8(&self.buffer).ok()?).ok()
-    }
-}
-
-fn move_from_uci(m: &str) -> ChessMove {
-    let src = &m[0..2];
-    let src = Square::new(((src.as_bytes()[1] - b'1') << 3) + (src.as_bytes()[0] - b'a'));
-
-    let dst = &m[2..4];
-    let dst = Square::new(((dst.as_bytes()[1] - b'1') << 3) + (dst.as_bytes()[0] - b'a'));
-
-    let piece = m.as_bytes().get(4).and_then(|p| match p {
-        b'n' => Some(Piece::Knight),
-        b'b' => Some(Piece::Bishop),
-        b'q' => Some(Piece::Queen),
-        b'r' => Some(Piece::Rook),
-        _ => None,
-    });
-
-    ChessMove::new(src, dst, piece)
-}
-
-#[tokio::main]
-async fn main() {
+fn main() {
     let api_key = std::fs::read_to_string("api_key.txt").unwrap().trim().to_string();
-    Arc::new(LichessClient::new(api_key)).listen().await;
+    swait::swait(Arc::new(LichessClient::new(LichessApi::new(api_key))).listen());
 }

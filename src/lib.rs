@@ -1,10 +1,11 @@
-pub use eval::{Eval, evaluate_static};
+pub use eval::Eval;
 pub use game::Game;
 pub use see::see;
 
 use std::time::*;
 use std::sync::{atomic::*, RwLock};
 
+mod debug;
 mod eval;
 pub mod game;
 mod move_order;
@@ -12,17 +13,21 @@ mod search;
 mod see;
 mod shared_table;
 mod trans_table;
+mod tune;
 
 pub struct Engine {
     pub game: Game,
     trans_table: trans_table::TransTable,
+    hist_table: move_order::HistoryTable,
+    countermove: move_order::CountermoveTable,
 
     time_ref: RwLock<Instant>,
     time_usable: RwLock<Duration>,
     can_time_out: AtomicBool,
 
-    nodes_searched: core::sync::atomic::AtomicUsize,
-    // search_done: AtomicBool,
+    debug: debug::DebugStats,
+
+    pub eval_params: eval::EvalParams,
 }
 
 impl Engine {
@@ -30,13 +35,16 @@ impl Engine {
         Self {
             game,
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
+            hist_table: move_order::ButterflyTable::new(),
+            countermove: move_order::CountermoveTable::new(),
 
             time_ref: Instant::now().into(),
             time_usable: Duration::default().into(),
             can_time_out: AtomicBool::new(true),
 
-            nodes_searched: AtomicUsize::new(0),
-            // search_done: AtomicBool::new(false),
+            debug: debug::DebugStats::default(),
+
+            eval_params: eval::EvalParams::default(),
         }
     }
 
@@ -61,20 +69,22 @@ impl Engine {
         self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
     }
 
-    pub fn time_control(&self, time_ctrl: TimeControl) {
-        // https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V2-UCI/Chess-Coding-Adventure/src/Bot.cs#L64
-
+    pub fn time_control(&self, moves_to_go: Option<usize>, time_ctrl: TimeControl) {
         let left = time_ctrl.time_left as u64;
         let incr = time_ctrl.time_incr as u64;
 
-        let mut think_time = left / 40;
+        *self.time_usable.write().unwrap() = Duration::from_millis(if let Some(mtg) = moves_to_go {
+            left / mtg as u64 + incr
+        } else {
+            let mut think_time = left / 40;
 
-        if left > incr << 2 {
-            think_time += incr * 4 / 5;
-        }
+            if left > incr << 2 {
+                think_time += incr * 4 / 5;
+            }
 
-        let min_think = (left / 4).min(50);
-        *self.time_usable.write().unwrap() = Duration::from_millis(min_think.max(think_time));
+            let min_think = (left / 4).min(50);
+            min_think.max(think_time)
+        });
     }
 
     pub fn allow_for(&self, time: Duration) {
@@ -90,22 +100,23 @@ impl Engine {
 
         let mut pv = Vec::with_capacity(max);
         pv.push(best);
+        if best == ChessMove::default() { return pv };
 
         let mut game = self.game.make_move(best);
         while let Some(tte) = self.trans_table.get(game.board().get_hash()) {
-            if tte.next == ChessMove::default() { break }
+            if tte.next == ChessMove::default() { break };
 
             pv.push(tte.next);
             game = game.make_move(tte.next);
 
-            if pv.len() >= max { break }
+            if pv.len() >= max { break };
         }
 
         pv
     }
 
     pub fn nodes(&self) -> usize {
-        self.nodes_searched.load(Ordering::Relaxed)
+        self.debug.nodes.get()
     }
 
     pub fn elapsed(&self) -> Duration {

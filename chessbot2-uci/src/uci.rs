@@ -17,12 +17,15 @@ pub enum UciCommand<'a> {
         movetime: Option<Duration>,
         wtime: Option<TimeControl>,
         btime: Option<TimeControl>,
+        movestogo: Option<usize>,
     },
     SetOption(&'a str, Option<&'a str>),
     Quit,
     D,
     Eval,
     Move(ChessMove),
+    Bench,
+    Selfplay,
 }
 
 fn move_from_uci(m: &str) -> ChessMove {
@@ -88,6 +91,7 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
             let mut btime = None;
             let mut winc = None;
             let mut binc = None;
+            let mut movestogo = None;
 
             while let Some(t) = token.next() {
                 match t {
@@ -97,6 +101,7 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
                     "btime" => btime = token.next().and_then(|t| t.parse().ok()),
                     "winc" => winc = token.next().and_then(|t| t.parse().ok()),
                     "binc" => binc = token.next().and_then(|t| t.parse().ok()),
+                    "movestogo" => movestogo = token.next().and_then(|t| t.parse().ok()),
                     _ => {},
                 }
             }
@@ -104,14 +109,15 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
             Some(UciCommand::Go {
                 depth,
                 movetime,
-                wtime: wtime.and_then(|time| winc.map(|inc| TimeControl {
+                wtime: wtime.map(|time| TimeControl {
                     time_left: time,
-                    time_incr: inc,
-                })),
-                btime: btime.and_then(|time| binc.map(|inc| TimeControl {
+                    time_incr: winc.unwrap_or(0),
+                }),
+                btime: btime.map(|time| TimeControl {
                     time_left: time,
-                    time_incr: inc,
-                })),
+                    time_incr: binc.unwrap_or(0),
+                }),
+                movestogo,
             })
         },
         Some("setoption") => {
@@ -125,6 +131,8 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
         Some("d") => Some(UciCommand::D),
         Some("eval") => Some(UciCommand::Eval),
         Some("move") => Some(UciCommand::Move(move_from_uci(token.next()?))),
+        Some("bench") => Some(UciCommand::Bench),
+        Some("selfplay") => Some(UciCommand::Selfplay),
         Some(_) => parse_command(token),
         None => None,
     }
