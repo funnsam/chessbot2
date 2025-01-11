@@ -99,6 +99,7 @@ fn main() {
 
                 println!("depth 8 avg: {:.2}ms", _time as f32 / ITERS as f32);
             },
+            Some(uci::UciCommand::Selfplay) => engine.self_play_gen_fen_csv(),
             None => println!("info string got unknown command {l}"),
         }
     }

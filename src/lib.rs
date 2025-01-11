@@ -100,15 +100,16 @@ impl Engine {
 
         let mut pv = Vec::with_capacity(max);
         pv.push(best);
+        if best == ChessMove::default() { return pv };
 
         let mut game = self.game.make_move(best);
         while let Some(tte) = self.trans_table.get(game.board().get_hash()) {
-            if tte.next == ChessMove::default() { break }
+            if tte.next == ChessMove::default() { break };
 
             pv.push(tte.next);
             game = game.make_move(tte.next);
 
-            if pv.len() >= max { break }
+            if pv.len() >= max { break };
         }
 
         pv

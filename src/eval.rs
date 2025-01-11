@@ -126,11 +126,27 @@ fn test_eval() {
     assert_eq!(-m_1, m1);
 }
 
-pub struct EvalParams {
-    pub pst_mid: [i16; 64 * 6],
-    pub pst_end: [i16; 64 * 6],
-    pub king_pawn_penalty: i16,
-    pub king_open_file_penalty: i16,
+pub type EvalParams = EvalParamList<i16>;
+
+pub struct EvalParamList<T> {
+    pub pst_mid: [T; 64 * 6],
+    pub pst_end: [T; 64 * 6],
+    pub king_pawn_penalty: T,
+    pub king_open_file_penalty: T,
+}
+
+impl<T: From<i16>> Default for EvalParamList<T> {
+    fn default() -> Self {
+        let s = EvalParams::default();
+
+        Self {
+            pst_mid: core::array::from_fn(|i| s.pst_mid[i].into()),
+            pst_end: core::array::from_fn(|i| (params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]).into()),
+
+            king_pawn_penalty: s.king_pawn_penalty.into(),
+            king_open_file_penalty: s.king_open_file_penalty.into(),
+        }
+    }
 }
 
 impl Default for EvalParams {
@@ -199,6 +215,8 @@ pub fn game_phase(board: &Board) -> u8 {
     board.combined().into_iter().map(|sq| PIECE_PHASE[unsafe { board.piece_on(sq).unwrap_unchecked() }.to_index()]).sum::<u8>().min(24)
 }
 
+/// # Note
+/// This table doesn't strictly represent the piece value of the ones that are used in evaluation.
 pub const PIECE_VALUE: [i16; 6] = [
     params::PIECE_VALUE_MID[0],
     params::PIECE_VALUE_MID[1],
