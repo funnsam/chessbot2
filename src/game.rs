@@ -22,6 +22,10 @@ impl Game {
         self.board().piece_on(mov.get_dest()).is_some()
     }
 
+    pub fn is_in_check(&self) -> bool {
+        self.board().checkers().0 != 0
+    }
+
     pub fn make_move(&self, mov: chess::ChessMove) -> Self {
         let mut fifty_move_counter = self.fifty_move_counter + 1;
 

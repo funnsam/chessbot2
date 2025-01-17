@@ -1,6 +1,8 @@
 # Model
 ```
-  P × 64
+  side to move × 2
+  0 × 6
+  P × 56
   N × 64
   B × 64
   R × 64

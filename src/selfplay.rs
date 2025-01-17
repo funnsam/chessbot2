@@ -7,7 +7,7 @@ impl Engine {
         let mut pos = std::collections::HashMap::new();
         self.allow_for(std::time::Duration::MAX);
 
-        'outer: for _ in 0..3_000 {
+        'outer: for i in 0..100 {
             self.game = Game::default();
 
             for _ in 0..16 {
@@ -21,29 +21,36 @@ impl Engine {
             let mut this_pos = vec![];
 
             loop {
-                let (m, e, _) = self.best_move(|s, _| s.nodes() < 15_000);
-                assert_ne!(m, chess::ChessMove::default(), "{}", self.game.get_fen());
-                self.game = self.game.make_move(m);
+                let (m, e, _) = self.best_move(|s, (_, e, d)| {
+                    println!("{i} {} {e} {d} {}", self.game.board(), self.nodes());
+                    s.nodes() < 50_000 && d <= 10
+                });
+                if m == chess::ChessMove::default() { break };
 
-                if self.game.board().status() != BoardStatus::Ongoing || self.game.can_declare_draw() || e.is_mate() {
+                if self.game.board().status() != BoardStatus::Ongoing || self.game.can_declare_draw() || e.is_mate() || self.game.board().combined().popcnt() <= 4 {
                     break;
                 }
 
-                this_pos.push((self.game.get_fen(), e));
+                if !(self.game.is_capture(m) || self.game.is_in_check()) {
+                    let e = if self.game.board().side_to_move() == Color::White { e } else { -e };
+
+                    this_pos.push((self.game.get_fen(), e));
+                }
+
+                self.game = self.game.make_move(m);
             }
 
-            let wdl = if self.game.board().status() == BoardStatus::Checkmate { (self.game.board().side_to_move() == Color::Black) as u8 as f32 } else { 0.5 };
             for (fen, e) in this_pos {
-                pos.insert(fen, (e, wdl));
+                pos.insert(fen, e);
             }
             println!("game completed");
         }
 
         let mut f = std::fs::File::create("self_play_fens.csv").unwrap();
-        for (fen, (eval, wdl)) in pos {
+        for (fen, eval) in pos {
             use std::io::Write;
 
-            writeln!(f, "{fen},{},{wdl}", eval.0).unwrap();
+            writeln!(f, "{fen},{}", eval.0).unwrap();
         }
         println!("csv written");
     }

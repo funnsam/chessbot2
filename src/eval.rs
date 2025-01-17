@@ -135,7 +135,7 @@ pub struct EvalParamList<T> {
     pub king_open_file_penalty: T,
 }
 
-impl<T: From<i16>> Default for EvalParamList<T> {
+impl Default for EvalParamList<f32> {
     fn default() -> Self {
         let s = EvalParams::default();
 
@@ -156,7 +156,7 @@ impl Default for EvalParams {
             pst_end: core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]),
 
             king_pawn_penalty: 15,
-            king_open_file_penalty: 5,
+            king_open_file_penalty: 0,
         }
     }
 }
