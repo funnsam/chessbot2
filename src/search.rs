@@ -80,6 +80,9 @@ impl Engine {
         is_pv: bool,
     ) -> Eval {
         let (next, eval, nt) = self._evaluate_search(prev_move, game, killer, depth, ply, alpha, beta, in_zw, is_pv);
+        if game.board().to_string() == "8/1p3pk1/4p1p1/3pP3/2r2P1P/6qK/8/8 w - - 0 1" {
+            println!("{depth} {next} {eval} {nt:?}");
+        }
 
         self.store_tt(depth, game, (next, eval, nt));
 
@@ -264,7 +267,7 @@ impl Engine {
 
     fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
         let standing_pat = evaluate_static(game.board());
-        if standing_pat >= beta { return beta; }
+        if standing_pat >= beta { return standing_pat; }
         alpha = alpha.max(standing_pat);
         let mut best = standing_pat;
 
@@ -283,7 +286,7 @@ impl Engine {
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                return best;
+                return eval;
             }
         }
 
