@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering;
 use crate::{*, eval::*, trans_table::*};
-use chess::{BoardStatus, ChessMove, MoveGen};
+use chess::{BoardStatus, ChessMove, MoveGen, Piece};
 use move_order::KillerTable;
 
 impl Engine {
@@ -152,7 +152,12 @@ impl Engine {
         let in_check = game.board().checkers().0 != 0;
 
         // null move pruning
-        if ply != 0 && !in_check && depth > 3 && is_pv {
+        if ply != 0 && !in_check && depth > 3 && is_pv && (
+            game.board().pieces(Piece::Knight).0 != 0 ||
+            game.board().pieces(Piece::Bishop).0 != 0 ||
+            game.board().pieces(Piece::Rook).0 != 0 ||
+            game.board().pieces(Piece::Queen).0 != 0
+        ) {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
             let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
