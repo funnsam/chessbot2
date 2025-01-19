@@ -231,7 +231,7 @@ impl Engine {
 
     fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
         let standing_pat = evaluate_static(game.board());
-        if standing_pat >= beta { return beta; }
+        if standing_pat >= beta { return standing_pat; }
         alpha = alpha.max(standing_pat);
         let mut best = standing_pat;
 
@@ -250,7 +250,7 @@ impl Engine {
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                return best;
+                return eval;
             }
         }
 
