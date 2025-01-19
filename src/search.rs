@@ -152,15 +152,15 @@ impl Engine {
         let in_check = game.board().checkers().0 != 0;
 
         // null move pruning
-        // if ply != 0 && !in_check && depth > 3 && !in_zw {
-        //     let game = game.make_null_move().unwrap();
-        //     let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-        //     let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
+        if ply != 0 && !in_check && depth > 3 && is_pv {
+            let game = game.make_null_move().unwrap();
+            let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
+            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
 
-        //     if eval >= beta {
-        //         return (ChessMove::default(), eval.incr_mate(), NodeType::None);
-        //     }
-        // }
+            if eval >= beta {
+                return (ChessMove::default(), eval.incr_mate(), NodeType::None);
+            }
+        }
 
         let tte = self.trans_table.get(game.board().get_hash());
 
