@@ -86,7 +86,7 @@ impl Engine {
     fn store_tt(&self, depth: usize, game: &Game, (next, eval, nt): (ChessMove, Eval, NodeType)) {
         if nt != NodeType::None && !self.times_up() {
             if let Some(tte) = self.trans_table.get_place(game.board().get_hash()) {
-                if tte.depth > depth as u8 {
+                if tte.depth as usize > depth {
                     return;
                 }
             }
@@ -94,8 +94,8 @@ impl Engine {
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
                 depth: depth as u8,
                 eval,
-                node_type: nt,
                 next,
+                flags: TransTableEntry::new_flags(nt),
             });
         }
     }
@@ -117,10 +117,11 @@ impl Engine {
 
         if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
             let eval = trans.eval;
+            let node_type = trans.node_type();
 
-            if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
-                || (trans.node_type == NodeType::LowerBound && eval >= beta)
-                || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
+            if trans.depth as usize >= depth && (node_type == NodeType::Exact
+                || (node_type == NodeType::LowerBound && eval >= beta)
+                || (node_type == NodeType::UpperBound && eval < alpha)) {
                 return (trans.next, eval, NodeType::None);
             }
         }
