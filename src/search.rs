@@ -24,7 +24,7 @@ impl Engine {
             if !cont(self, prev.clone()) { break };
         }
 
-        println!("{:#?}", self.debug);
+        // println!("{:#?}", self.debug);
         prev
     }
 
@@ -80,9 +80,6 @@ impl Engine {
         is_pv: bool,
     ) -> Eval {
         let (next, eval, nt) = self._evaluate_search(prev_move, game, killer, depth, ply, alpha, beta, in_zw, is_pv);
-        if game.board().to_string() == "8/1p3pk1/4p1p1/3pP3/2r2P1P/6qK/8/8 w - - 0 1" {
-            println!("{depth} {next} {eval} {nt:?}");
-        }
 
         self.store_tt(depth, game, (next, eval, nt));
 
@@ -122,13 +119,15 @@ impl Engine {
             return (ChessMove::default(), Eval(0), NodeType::None);
         }
 
-        if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
-            let eval = trans.eval;
+        if !is_pv {
+            if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
+                let eval = trans.eval;
 
-            if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
-                || (trans.node_type == NodeType::LowerBound && eval >= beta)
-                || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
-                return (trans.next, eval, NodeType::None);
+                if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
+                    || (trans.node_type == NodeType::LowerBound && eval >= beta)
+                    || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
+                    return (trans.next, eval, NodeType::None);
+                }
             }
         }
 
@@ -161,20 +160,20 @@ impl Engine {
         let in_check = game.board().checkers().0 != 0;
 
         // null move pruning
-        if ply != 0 && !in_check && depth > 3 && is_pv && (
-            game.board().pieces(Piece::Knight).0 != 0 ||
-            game.board().pieces(Piece::Bishop).0 != 0 ||
-            game.board().pieces(Piece::Rook).0 != 0 ||
-            game.board().pieces(Piece::Queen).0 != 0
-        ) {
-            let game = game.make_null_move().unwrap();
-            let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
+        // if ply != 0 && !in_check && depth > 3 && is_pv && (
+        //     game.board().pieces(Piece::Knight).0 != 0 ||
+        //     game.board().pieces(Piece::Bishop).0 != 0 ||
+        //     game.board().pieces(Piece::Rook).0 != 0 ||
+        //     game.board().pieces(Piece::Queen).0 != 0
+        // ) {
+        //     let game = game.make_null_move().unwrap();
+        //     let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
+        //     let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
 
-            if eval >= beta {
-                return (ChessMove::default(), eval.incr_mate(), NodeType::None);
-            }
-        }
+        //     if eval >= beta {
+        //         return (ChessMove::default(), eval.incr_mate(), NodeType::None);
+        //     }
+        // }
 
         let tte = self.trans_table.get(game.board().get_hash());
 
@@ -273,7 +272,8 @@ impl Engine {
 
     fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
         let standing_pat = evaluate_static(game.board());
-        if standing_pat >= beta { return standing_pat; }
+        // TODO: failing to standing pat makes sprt fail, need investigation
+        if standing_pat >= beta { return beta; }
         alpha = alpha.max(standing_pat);
         let mut best = standing_pat;
 

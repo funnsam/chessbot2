@@ -27,7 +27,9 @@ impl fmt::Display for RelaxedCounter {
 }
 
 impl RelaxedCounter {
-    pub fn inc(&self) { self.0.fetch_add(1, Ordering::Relaxed); }
+    pub fn inc(&self) {
+        // self.0.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 macro_rules! debugs {
