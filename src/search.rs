@@ -88,11 +88,11 @@ impl Engine {
 
     fn store_tt(&self, depth: usize, game: &Game, (next, eval, nt): (ChessMove, Eval, NodeType)) {
         if nt != NodeType::None && !self.times_up() {
-            if let Some(tte) = self.trans_table.get_place(game.board().get_hash()) {
-                if tte.depth > depth as u8 {
-                    return;
-                }
-            }
+            // if let Some(tte) = self.trans_table.get_place(game.board().get_hash()) {
+            //     if tte.depth > depth as u8 {
+            //         return;
+            //     }
+            // }
 
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
                 depth: depth as u8,
@@ -160,20 +160,20 @@ impl Engine {
         let in_check = game.board().checkers().0 != 0;
 
         // null move pruning
-        // if ply != 0 && !in_check && depth > 3 && is_pv && (
-        //     game.board().pieces(Piece::Knight).0 != 0 ||
-        //     game.board().pieces(Piece::Bishop).0 != 0 ||
-        //     game.board().pieces(Piece::Rook).0 != 0 ||
-        //     game.board().pieces(Piece::Queen).0 != 0
-        // ) {
-        //     let game = game.make_null_move().unwrap();
-        //     let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-        //     let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
+        if ply != 0 && !in_check && depth > 3 && is_pv && (
+            game.board().pieces(Piece::Knight).0 != 0 ||
+            game.board().pieces(Piece::Bishop).0 != 0 ||
+            game.board().pieces(Piece::Rook).0 != 0 ||
+            game.board().pieces(Piece::Queen).0 != 0
+        ) {
+            let game = game.make_null_move().unwrap();
+            let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
+            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
 
-        //     if eval >= beta {
-        //         return (ChessMove::default(), eval.incr_mate(), NodeType::None);
-        //     }
-        // }
+            if eval >= beta {
+                return (ChessMove::default(), eval.incr_mate(), NodeType::None);
+            }
+        }
 
         let tte = self.trans_table.get(game.board().get_hash());
 
@@ -292,7 +292,7 @@ impl Engine {
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                return eval;
+                return best;
             }
         }
 
