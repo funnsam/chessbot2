@@ -1,6 +1,6 @@
 #![feature(str_split_whitespace_remainder)]
 
-use std::io::BufRead;
+use std::{io::BufRead, str::FromStr};
 use chessbot2::*;
 
 mod uci;
@@ -72,6 +72,7 @@ fn main() {
 
                 let mut _time = 0;
 
+                engine.game = Game::from_str("r5k1/5pp1/P1p1P2p/2R5/3r4/6PP/1P2R1K1/8 b - - 0 34").unwrap();
                 engine.allow_for(std::time::Duration::MAX);
                 for _ in 0..ITERS {
                     engine.resize_hash(DEFAULT_HASH_SIZE_MB * MB);
@@ -80,7 +81,7 @@ fn main() {
                         let time = engine.elapsed();
                         let nodes = engine.nodes();
 
-                        if depth == 8 {
+                        if depth == 10 {
                             _time += time.as_millis();
                         }
 
@@ -93,11 +94,11 @@ fn main() {
                             .collect::<Vec<_>>()
                             .join(" "),
                         );
-                        8 > depth
+                        10 > depth
                     });
                 }
 
-                println!("depth 8 avg: {:.2}ms", _time as f32 / ITERS as f32);
+                println!("depth 10 avg: {:.2}ms", _time as f32 / ITERS as f32);
             },
             None => println!("info string got unknown command {l}"),
         }
