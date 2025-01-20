@@ -158,7 +158,7 @@ impl Engine {
         let in_check = game.board().checkers().0 != 0;
 
         // null move pruning
-        if ply != 0 && !in_check && depth > 3 && !in_zw && (
+        if ply != 0 && !in_check && depth > 3 && (
             game.board().pieces(Piece::Knight).0 != 0 ||
             game.board().pieces(Piece::Bishop).0 != 0 ||
             game.board().pieces(Piece::Rook).0 != 0 ||
