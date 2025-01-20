@@ -256,7 +256,7 @@ impl Engine {
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                return eval;
+                return best;
             }
         }
 
