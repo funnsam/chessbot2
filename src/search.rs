@@ -85,6 +85,12 @@ impl Engine {
 
     fn store_tt(&self, depth: usize, game: &Game, (next, eval, nt): (ChessMove, Eval, NodeType)) {
         if nt != NodeType::None && !self.times_up() {
+            if let Some(tte) = self.trans_table.get_place(game.board().get_hash()) {
+                if tte.depth > depth as u8 {
+                    return;
+                }
+            }
+
             self.trans_table.insert(game.board().get_hash(), TransTableEntry {
                 depth: depth as u8,
                 eval,
