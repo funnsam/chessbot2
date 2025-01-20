@@ -9,6 +9,7 @@ mod debug;
 mod eval;
 pub mod game;
 mod move_order;
+mod node;
 mod search;
 mod see;
 mod shared_table;
@@ -124,7 +125,7 @@ impl Engine {
     pub fn tt_size(&self) -> usize { self.trans_table.size() }
 
     pub fn tt_used(&self) -> usize {
-        self.trans_table.filter_count(|e| e.node_type != trans_table::NodeType::None)
+        self.trans_table.filter_count(|e| e.node_type != node::NodeType::None)
     }
 }
 

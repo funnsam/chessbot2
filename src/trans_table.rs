@@ -1,4 +1,4 @@
-use crate::{eval::Eval, shared_table::*};
+use crate::{eval::Eval, node::NodeType, shared_table::*};
 
 pub type TransTable = SharedHashTable<TransTableEntry>;
 
@@ -12,9 +12,3 @@ pub struct TransTableEntry {
 }
 
 unsafe impl bytemuck::NoUninit for TransTableEntry {}
-
-#[repr(u8)]
-#[derive(Default, Debug, Clone, Copy, bytemuck::NoUninit, PartialEq, Eq)]
-pub enum NodeType {
-    #[default] Exact, UpperBound, LowerBound, None
-}

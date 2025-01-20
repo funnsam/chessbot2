@@ -2,6 +2,7 @@ use core::sync::atomic::Ordering;
 use crate::{*, eval::*, trans_table::*};
 use chess::{BoardStatus, ChessMove, MoveGen, Piece};
 use move_order::KillerTable;
+use node::{Cut, NodeType, Pv};
 
 impl Engine {
     pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
@@ -44,7 +45,7 @@ impl Engine {
         alpha: Eval,
         beta: Eval,
     ) -> (ChessMove, Eval) {
-        let (next, eval, nt) = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, alpha, beta, false, true);
+        let (next, eval, nt) = self._evaluate_search::<Pv>(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, alpha, beta, false);
 
         self.store_tt(depth, &self.game, (next, eval, nt));
 
@@ -52,7 +53,7 @@ impl Engine {
     }
 
     #[inline]
-    fn zw_search(
+    fn zw_search<Node: node::Node>(
         &self,
         prev_move: ChessMove,
         game: &Game,
@@ -61,12 +62,12 @@ impl Engine {
         ply: usize,
         beta: Eval,
     ) -> Eval {
-        self.evaluate_search(prev_move, game, killer, depth, ply, beta - 1, beta, true, false)
+        self.evaluate_search::<Node>(prev_move, game, killer, depth, ply, beta - 1, beta, true)
     }
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
     #[inline]
-    fn evaluate_search(
+    fn evaluate_search<Node: node::Node>(
         &self,
         prev_move: ChessMove,
         game: &Game,
@@ -76,9 +77,8 @@ impl Engine {
         alpha: Eval,
         beta: Eval,
         in_zw: bool,
-        is_pv: bool,
     ) -> Eval {
-        let (next, eval, nt) = self._evaluate_search(prev_move, game, killer, depth, ply, alpha, beta, in_zw, is_pv);
+        let (next, eval, nt) = self._evaluate_search::<Node>(prev_move, game, killer, depth, ply, alpha, beta, in_zw);
 
         self.store_tt(depth, game, (next, eval, nt));
 
@@ -102,7 +102,7 @@ impl Engine {
         }
     }
 
-    fn _evaluate_search(
+    fn _evaluate_search<Node: node::Node>(
         &self,
         prev_move: ChessMove,
         game: &Game,
@@ -112,19 +112,18 @@ impl Engine {
         mut alpha: Eval,
         beta: Eval,
         in_zw: bool,
-        is_pv: bool,
     ) -> (ChessMove, Eval, NodeType) {
         if game.can_declare_draw() {
             return (ChessMove::default(), Eval(0), NodeType::None);
         }
 
-        if !is_pv {
+        if !Node::PV {
             if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
                 let eval = trans.eval;
 
-                if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
-                    || (trans.node_type == NodeType::LowerBound && eval >= beta)
-                    || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
+                if trans.depth as usize >= depth && (trans.node_type == NodeType::Pv
+                    || (trans.node_type == NodeType::Cut && eval >= beta)
+                    || (trans.node_type == NodeType::All && eval < alpha)) {
                     return (trans.next, eval, NodeType::None);
                 }
             }
@@ -159,7 +158,7 @@ impl Engine {
         let in_check = game.board().checkers().0 != 0;
 
         // null move pruning
-        if ply != 0 && !in_check && depth > 3 && is_pv && (
+        if ply != 0 && !in_check && depth > 3 && !in_zw && (
             game.board().pieces(Piece::Knight).0 != 0 ||
             game.board().pieces(Piece::Bishop).0 != 0 ||
             game.board().pieces(Piece::Rook).0 != 0 ||
@@ -167,7 +166,7 @@ impl Engine {
         ) {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
+            let eval = -self.zw_search::<Cut>(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
 
             if eval >= beta {
                 return (ChessMove::default(), eval.incr_mate(), NodeType::None);
@@ -207,7 +206,7 @@ impl Engine {
 
             let mut eval = Eval(i16::MIN);
             let do_full_research = if can_reduce {
-                eval = -self.zw_search(m, &game, &killer, depth / 2, ply + 1, -alpha);
+                eval = -self.zw_search::<Node::Zw>(m, &game, &killer, depth / 2, ply + 1, -alpha);
 
                 if alpha < eval && depth / 2 < depth - 1 {
                     self.debug.research.inc();
@@ -217,16 +216,16 @@ impl Engine {
 
                 alpha < eval && depth / 2 < depth - 1
             } else {
-                !is_pv || real_i != 0
+                !Node::PV || real_i != 0
             };
 
             if do_full_research {
-                eval = -self.zw_search(m, &game, &killer, depth - 1, ply + 1, -alpha);
+                eval = -self.zw_search::<Node::Zw>(m, &game, &killer, depth - 1, ply + 1, -alpha);
                 self.debug.all_full_zw.inc();
             }
 
-            if is_pv && (real_i == 0 || alpha < eval) {
-                eval = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw, true);
+            if Node::PV && (real_i == 0 || alpha < eval) {
+                eval = -self.evaluate_search::<Pv>(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
 
                 self.debug.all_full.inc();
                 if do_full_research {
@@ -260,13 +259,13 @@ impl Engine {
                     *self.countermove.get_mut(prev_move) = m;
                 }
 
-                return (best.0, best.1.incr_mate(), NodeType::LowerBound);
+                return (best.0, best.1.incr_mate(), NodeType::Cut);
             }
 
             real_i += 1;
         }
 
-        (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::UpperBound } else { NodeType::Exact })
+        (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::All } else { NodeType::Pv })
     }
 
     fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
