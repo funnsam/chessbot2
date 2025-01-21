@@ -68,6 +68,8 @@ impl crate::Engine {
     pub(crate) fn move_score(&self, prev_move: ChessMove, tte: &Option<TransTableEntry>, m: ChessMove, game: &Game, killer: &KillerTable) -> i32 {
         if tte.is_some_and(|tte| tte.next == m) {
             i32::MAX
+        } else if let Some(piece) = m.get_promotion() {
+            i32::MAX - 6 + piece as i32
         } else if game.is_capture(m) {
             mvv_lva(game, m) as i32 * 327601
         } else {
