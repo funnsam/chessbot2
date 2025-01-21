@@ -10,6 +10,7 @@ impl Engine {
         self.nodes_searched.store(0, Ordering::Relaxed);
         self.hist_table.clear();
         self.countermove.clear();
+        self.debug.clear();
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
         let prev = self.root_search(1, Eval::MIN, Eval::MAX);
@@ -25,7 +26,7 @@ impl Engine {
             if !cont(self, prev.clone()) { break };
         }
 
-        // println!("{:#?}", self.debug);
+        println!("{:#?}", self.debug);
         prev
     }
 

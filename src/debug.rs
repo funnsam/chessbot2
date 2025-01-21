@@ -28,7 +28,7 @@ impl fmt::Display for RelaxedCounter {
 
 impl RelaxedCounter {
     pub fn inc(&self) {
-        // self.0.fetch_add(1, Ordering::Relaxed);
+        self.0.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -37,6 +37,12 @@ macro_rules! debugs {
         #[derive(Debug, Clone, Default)]
         pub struct DebugStats {
             $(pub $name: RelaxedCounter,)*
+        }
+
+        impl DebugStats {
+            pub fn clear(&self) {
+                $(self.$name.0.store(0, Ordering::Relaxed);)*
+            }
         }
     };
 }
