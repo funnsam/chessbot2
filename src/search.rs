@@ -194,14 +194,14 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
         let killer = KillerTable::new();
 
         // internal iterative reductions
-        // if ply > 0 && depth >= 4 && self.trans_table.get(game.board().get_hash()).is_none() {
-        //     let low = self._evaluate_search(prev_move, game, &killer, depth / 4, ply, alpha, beta, false, false);
-        //     self.store_tt(depth / 4, game, low);
+        if !ROOT && depth >= 4 && self.trans_table.get(game.board().get_hash()).is_none() {
+            let low = self._evaluate_search::<Node, ROOT>(prev_move, game, &killer, depth / 4, ply, alpha, beta, false);
+            self.store_tt(depth / 4, game, low);
 
-        //     if low.1 <= alpha {
-        //         return (low.0, low.1, NodeType::None);
-        //     }
-        // }
+            if low.1 <= alpha {
+                return (low.0, low.1, NodeType::None);
+            }
+        }
 
         let in_check = game.board().checkers().0 != 0;
 
