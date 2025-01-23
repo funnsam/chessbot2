@@ -32,11 +32,12 @@ impl Engine {
 
     fn root_aspiration(&self, depth: usize, prev: Eval) -> (ChessMove, Eval) {
         let (alpha, beta) = (prev - 25, prev + 25);
-        let eval = self.root_search(depth, alpha, beta);
+        let (mov, eval, nt) = self.root_search(depth, alpha, beta);
 
-        if !(alpha <= eval.1 && eval.1 <= beta) {
-            self.root_search(depth, Eval::MIN, Eval::MAX)
-        } else { eval }
+        if nt != NodeType::Pv {
+            let (mov, eval, _) = self.root_search(depth, Eval::MIN, Eval::MAX);
+            (mov, eval)
+        } else { (mov, eval) }
     }
 
     #[inline]
@@ -45,12 +46,12 @@ impl Engine {
         depth: usize,
         alpha: Eval,
         beta: Eval,
-    ) -> (ChessMove, Eval) {
+    ) -> (ChessMove, Eval, NodeType) {
         let (next, eval, nt) = self._evaluate_search::<Pv>(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, alpha, beta, false);
 
         self.store_tt(depth, &self.game, (next, eval, nt));
 
-        (next, eval)
+        (next, eval, nt)
     }
 
     #[inline]
