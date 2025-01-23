@@ -1,36 +1,69 @@
 use core::sync::atomic::Ordering;
+
 use crate::{*, eval::*, trans_table::*};
 use chess::{BoardStatus, ChessMove, MoveGen, Piece};
 use move_order::KillerTable;
 use node::{Cut, NodeType, Pv};
 
 impl Engine {
-    pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
-        *self.time_ref.write().unwrap() = Instant::now();
-        self.nodes_searched.store(0, Ordering::Relaxed);
-        self.hist_table.clear();
-        self.countermove.clear();
+    pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&mut self, mut cont: F) -> (ChessMove, Eval, usize) {
+        self.time_ref = Instant::now();
+        self.total_nodes_searched.store(0, Ordering::Relaxed);
         self.debug.clear();
 
+        let mut main_thread = self.new_thread::<true>(0);
+
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self.root_search(1, Eval::MIN, Eval::MAX);
-        let mut prev = (prev.0, prev.1, 1);
+        let prev = main_thread.root_search(1, Eval::MIN, Eval::MAX);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
-        if !cont(self, prev.clone()) { return prev };
+        let mut prev = (prev.0, prev.1, 1);
+        if !cont(self, prev) { return prev };
+
+        *self.smp_prev.lock() = prev.1;
+        self.smp_abort.initiate_wait();
+
+        let mut sum = 0;
+        while sum < self.smp_count {
+            sum += self.smp_start.notify_all();
+        }
 
         for depth in 2..=255 {
-            let this = self.root_aspiration(depth, prev.1);
+            let this = main_thread.root_aspiration(depth, prev.1);
+
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
-            if !cont(self, prev.clone()) { break };
+            if !cont(self, prev) { break };
         }
 
+        self.smp_abort.initiate();
         println!("{:#?}", self.debug);
         prev
     }
+}
 
-    fn root_aspiration(&self, depth: usize, prev: Eval) -> (ChessMove, Eval) {
+impl SmpThread<'_, false> {
+    pub fn start(mut self) {
+        while !self.smp_exit.initiated() {
+            self.smp_abort.always_wait();
+
+            let mut prev = {
+                let mut lock = self.smp_prev.lock();
+                self.smp_start.wait(&mut lock);
+
+                *lock
+            };
+
+            for depth in 2..=255 {
+                prev = self.root_aspiration(depth, prev).1;
+                if self.abort() { break };
+            }
+        }
+    }
+}
+
+impl<const MAIN: bool> SmpThread<'_, MAIN> {
+    fn root_aspiration(&mut self, depth: usize, prev: Eval) -> (ChessMove, Eval) {
         let (alpha, beta) = (prev - 25, prev + 25);
         let (mov, eval, nt) = self.root_search(depth, alpha, beta);
 
@@ -42,21 +75,33 @@ impl Engine {
 
     #[inline]
     fn root_search(
-        &self,
+        &mut self,
         depth: usize,
         alpha: Eval,
         beta: Eval,
     ) -> (ChessMove, Eval, NodeType) {
-        let (next, eval, nt) = self._evaluate_search::<Pv>(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, alpha, beta, false);
+        self.nodes_searched = 0;
 
-        self.store_tt(depth, &self.game, (next, eval, nt));
+        let game: Game = self.game.read().clone();
+        let (next, eval, nt) = self._evaluate_search::<Pv, true>(ChessMove::default(), &game, &KillerTable::new(), depth, 0, alpha, beta, false);
+
+        self.store_tt(depth, &game, (next, eval, nt));
+        self.total_nodes_searched.fetch_add(self.nodes_searched, Ordering::Relaxed);
 
         (next, eval, nt)
     }
 
+    fn abort(&self) -> bool {
+        if !MAIN {
+            self.smp_abort.initiated()
+        } else {
+            self.times_up()
+        }
+    }
+
     #[inline]
     fn zw_search<Node: node::Node>(
-        &self,
+        &mut self,
         prev_move: ChessMove,
         game: &Game,
         killer: &KillerTable,
@@ -70,7 +115,7 @@ impl Engine {
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
     #[inline]
     fn evaluate_search<Node: node::Node>(
-        &self,
+        &mut self,
         prev_move: ChessMove,
         game: &Game,
         killer: &KillerTable,
@@ -80,7 +125,7 @@ impl Engine {
         beta: Eval,
         in_zw: bool,
     ) -> Eval {
-        let (next, eval, nt) = self._evaluate_search::<Node>(prev_move, game, killer, depth, ply, alpha, beta, in_zw);
+        let (next, eval, nt) = self._evaluate_search::<Node, false>(prev_move, game, killer, depth, ply, alpha, beta, in_zw);
 
         self.store_tt(depth, game, (next, eval, nt));
 
@@ -88,7 +133,7 @@ impl Engine {
     }
 
     fn store_tt(&self, depth: usize, game: &Game, (next, eval, nt): (ChessMove, Eval, NodeType)) {
-        if nt != NodeType::None && !self.times_up() {
+        if nt != NodeType::None && !self.abort() {
             if let Some(tte) = self.trans_table.get_place(game.board().get_hash()) {
                 if tte.depth as usize > depth {
                     return;
@@ -104,8 +149,8 @@ impl Engine {
         }
     }
 
-    fn _evaluate_search<Node: node::Node>(
-        &self,
+    fn _evaluate_search<Node: node::Node, const ROOT: bool>(
+        &mut self,
         prev_move: ChessMove,
         game: &Game,
         p_killer: &KillerTable,
@@ -138,7 +183,7 @@ impl Engine {
             BoardStatus::Stalemate => return (ChessMove::default(), Eval(0), NodeType::None),
         }
 
-        if self.times_up() {
+        if self.abort() {
             return (ChessMove::default(), Eval(0), NodeType::None);
         }
 
@@ -179,14 +224,16 @@ impl Engine {
         let tte = self.trans_table.get(game.board().get_hash());
 
         let mut moves = MoveGen::new_legal(game.board())
-            .map(|m| (m, self.move_score(prev_move, &tte, m, game, &p_killer)))
+            .map(|m| (m, self.move_score(m, prev_move, game, &tte, &p_killer)))
             .collect::<arrayvec::ArrayVec<_, 256>>();
         moves.sort_unstable_by_key(|i| -i.1);
-
-        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
+        if ROOT && !MAIN {
+            let len = moves.len();
+            moves.rotate_left((self.index / 2) % len);
+        }
 
         let mut best = (ChessMove::default(), Eval::MIN);
-        let mut real_i = 0;
+        let mut children_searched = 0;
         let _game = &game;
         for (i, (m, _)) in moves.iter().copied().enumerate() {
             let game = _game.make_move(m);
@@ -205,7 +252,7 @@ impl Engine {
                 }
             }
 
-            let can_reduce = depth >= 3 && !in_check && real_i != 0;
+            let can_reduce = depth >= 3 && !in_check && children_searched != 0;
 
             let mut eval = Eval(i16::MIN);
             let do_full_research = if can_reduce {
@@ -219,7 +266,7 @@ impl Engine {
 
                 alpha < eval && depth / 2 < depth - 1
             } else {
-                !Node::PV || real_i != 0
+                !Node::PV || children_searched != 0
             };
 
             if do_full_research {
@@ -227,7 +274,7 @@ impl Engine {
                 self.debug.all_full_zw.inc();
             }
 
-            if Node::PV && (real_i == 0 || alpha < eval) {
+            if Node::PV && (children_searched == 0 || alpha < eval) {
                 eval = -self.evaluate_search::<Pv>(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
 
                 self.debug.all_full.inc();
@@ -236,10 +283,11 @@ impl Engine {
                 }
             }
 
-            if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None) };
+            if self.abort() { return (best.0, best.1.incr_mate(), NodeType::None) };
+            self.nodes_searched += 1;
 
-            // if ply == 0 {
-            //     println!(" {m} {eval} {can_reduce} {do_full_research} {:?}", self.find_pv(m, 100).into_iter().map(|i| i.to_string()).collect::<Vec<_>>());
+            // if ROOT {
+            //     println!(" {m} {eval} α{alpha} β{beta} {:?}", self.find_pv(m, 100).into_iter().map(|i| i.to_string()).collect::<Vec<_>>());
             // }
 
             if eval > best.1 || best.0 == ChessMove::default() {
@@ -265,13 +313,13 @@ impl Engine {
                 return (best.0, best.1.incr_mate(), NodeType::Cut);
             }
 
-            real_i += 1;
+            children_searched += 1;
         }
 
         (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::All } else { NodeType::Pv })
     }
 
-    fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
+    fn quiescence_search(&mut self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
         let standing_pat = evaluate_static(game.board());
         // TODO: failing to standing pat makes sprt fail, need investigation
         if standing_pat >= beta { return beta; }
@@ -280,13 +328,13 @@ impl Engine {
 
         let mut moves = MoveGen::new_legal(game.board());
         moves.set_iterator_mask(*game.board().combined());
-        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         for m in moves {
             if see(game, m) < 0 { continue };
 
             let game = game.make_move(m);
             let eval = -self.quiescence_search(&game, -beta, -alpha);
+            self.nodes_searched += 1;
 
             if eval > best {
                 best = eval;

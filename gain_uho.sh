@@ -10,7 +10,7 @@ fi
 fastchess \
     -engine "cmd=engines/$2" name="$2" \
     -engine "cmd=engines/$3" name="$3" \
-    -each tc=8+0.08 -rounds $1 -repeat -concurrency 4 --force-concurrency -recover \
+    -each tc=8+0.08 -rounds $1 -repeat -concurrency 4 --force-concurrency -recover -ratinginterval 1 \
     -openings file=UHO_Lichess_4852_v1.epd format=epd order=random \
     -pgnout file=games.pgn nodes=true nps=true \
     -sprt elo0=0 elo1=10 alpha=0.05 beta=0.05

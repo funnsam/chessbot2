@@ -3,7 +3,11 @@ pub use game::Game;
 pub use see::see;
 
 use std::time::*;
-use std::sync::{atomic::*, RwLock};
+use std::sync::atomic::*;
+
+use sync::*;
+
+use parking_lot::{Condvar, Mutex, RwLock};
 
 mod debug;
 mod eval;
@@ -13,67 +17,109 @@ mod node;
 mod search;
 mod see;
 mod shared_table;
+mod sync;
 mod trans_table;
 
 pub struct Engine {
-    pub game: Game,
+    pub game: RwLock<Game>,
     trans_table: trans_table::TransTable,
+
+    time_ref: Instant,
+    time_usable: Duration,
+    can_time_out: AtomicBool,
+
+    debug: debug::DebugStats,
+
+    smp_prev: Mutex<Eval>,
+    smp_start: Condvar,
+    smp_abort: CondBarrier,
+    smp_exit: CondBarrier,
+    total_nodes_searched: AtomicUsize,
+
+    smp_count: usize,
+}
+
+pub(crate) struct SmpThread<'a, const MAIN: bool = false> {
+    engine: &'a Engine,
+    index: usize,
+
     hist_table: move_order::HistoryTable,
     countermove: move_order::CountermoveTable,
 
-    time_ref: RwLock<Instant>,
-    time_usable: RwLock<Duration>,
-    can_time_out: AtomicBool,
-
-    nodes_searched: AtomicUsize,
-
-    debug: debug::DebugStats,
+    nodes_searched: usize,
 }
 
 impl Engine {
     pub fn new(game: Game, hash_size_bytes: usize) -> Self {
         Self {
-            game,
+            game: RwLock::new(game),
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
-            hist_table: move_order::ButterflyTable::new(),
-            countermove: move_order::CountermoveTable::new(),
 
-            time_ref: Instant::now().into(),
-            time_usable: Duration::default().into(),
+            time_ref: Instant::now(),
+            time_usable: Duration::default(),
             can_time_out: AtomicBool::new(true),
 
-            nodes_searched: AtomicUsize::new(0),
-
             debug: debug::DebugStats::default(),
+
+            smp_prev: Mutex::new(Eval(0)),
+            smp_start: Condvar::new(),
+            smp_abort: CondBarrier::new(1),
+            smp_exit: CondBarrier::new(1),
+            total_nodes_searched: AtomicUsize::new(0),
+
+            smp_count: 0,
         }
     }
 
-    // pub fn ponder(self: Arc<Self>) {
-    //     self.allow_for(Duration::ZERO);
-    //     self.can_time_out.store(false, Ordering::Relaxed);
+    pub fn kill_smp(&mut self) {
+        self.smp_abort.initiate_wait();
+        self.smp_exit.initiate();
 
-    //     {
-    //         let engine = Arc::clone(&self);
-    //         std::thread::spawn(move || {
-    //             engine.best_move(|_, _| true);
-    //         });
-    //     }
-    // }
+        let mut sum = 0;
 
-    // pub fn stop_ponder(&self) {
-    //     self.can_time_out.store(true, Ordering::Relaxed);
-    //     while !self.search_done.load(Ordering::Relaxed) {}
-    // }
+        *self.smp_prev.lock() = Eval(0);
+        while sum < self.smp_count {
+            sum += self.smp_start.notify_all();
+        }
+        self.smp_abort.initiate();
 
-    pub fn resize_hash(&mut self, hash_size_bytes: usize) {
-        self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
+        self.smp_exit.always_wait();
+        self.smp_exit.uninitiate();
+        self.smp_abort.uninitiate();
     }
 
-    pub fn time_control(&self, moves_to_go: Option<usize>, time_ctrl: TimeControl) {
+    pub(crate) fn new_thread<'a, const MAIN: bool>(&'a self, index: usize) -> SmpThread<'a, MAIN> {
+        SmpThread {
+            engine: self,
+            index,
+
+            hist_table: move_order::ButterflyTable::new(),
+            countermove: move_order::CountermoveTable::new(),
+
+            nodes_searched: 0,
+        }
+    }
+
+    pub fn start_smp(&mut self, smp_count: usize) {
+        self.smp_abort = CondBarrier::new(smp_count + 1);
+        self.smp_exit = CondBarrier::new(smp_count + 1);
+        self.smp_count = smp_count;
+
+        for index in 1..=smp_count {
+            // SAFETY: `Engine` checks that no threads are alive when exiting
+            let s = unsafe { core::mem::transmute::<_, &'static Self>(&*self) };
+
+            std::thread::spawn(move || {
+                s.new_thread::<false>(index).start();
+            });
+        }
+    }
+
+    pub fn time_control(&mut self, moves_to_go: Option<usize>, time_ctrl: TimeControl) {
         let left = time_ctrl.time_left as u64;
         let incr = time_ctrl.time_incr as u64;
 
-        *self.time_usable.write().unwrap() = Duration::from_millis(if let Some(mtg) = moves_to_go {
+        self.time_usable = Duration::from_millis(if let Some(mtg) = moves_to_go {
             left / mtg as u64 + incr
         } else {
             let mut think_time = left / 40;
@@ -87,12 +133,12 @@ impl Engine {
         });
     }
 
-    pub fn allow_for(&self, time: Duration) {
-        *self.time_usable.write().unwrap() = time;
+    pub fn allow_for(&mut self, time: Duration) {
+        self.time_usable = time;
     }
 
     pub fn times_up(&self) -> bool {
-        self.can_time_out.load(Ordering::Relaxed) && self.elapsed() > *self.time_usable.read().unwrap()
+        self.can_time_out.load(Ordering::Relaxed) && self.elapsed() > self.time_usable
     }
 
     pub fn find_pv(&self, best: chess::ChessMove, max: usize) -> Vec<chess::ChessMove> {
@@ -101,7 +147,7 @@ impl Engine {
         let mut pv = Vec::with_capacity(max);
         pv.push(best);
 
-        let mut game = self.game.make_move(best);
+        let mut game = self.game.read().make_move(best);
         while let Some(tte) = self.trans_table.get(game.board().get_hash()) {
             if tte.next == ChessMove::default() { break }
 
@@ -115,17 +161,47 @@ impl Engine {
     }
 
     pub fn nodes(&self) -> usize {
-        self.nodes_searched.load(Ordering::Relaxed)
+        self.total_nodes_searched.load(Ordering::Relaxed)
     }
 
     pub fn elapsed(&self) -> Duration {
-        self.time_ref.read().unwrap().elapsed()
+        self.time_ref.elapsed()
     }
 
     pub fn tt_size(&self) -> usize { self.trans_table.size() }
 
     pub fn tt_used(&self) -> usize {
         self.trans_table.filter_count(|e| e.node_type() != node::NodeType::None)
+    }
+
+    pub fn resize_hash(&mut self, hash_size_bytes: usize) {
+        self.trans_table = trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size());
+    }
+
+    pub fn clear_hash(&mut self) {
+        self.trans_table.clear();
+    }
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        self.kill_smp();
+    }
+}
+
+impl<const MAIN: bool> Drop for SmpThread<'_, MAIN> {
+    fn drop(&mut self) {
+        if !MAIN {
+            self.smp_exit.always_wait();
+        }
+    }
+}
+
+impl<const MAIN: bool> core::ops::Deref for SmpThread<'_, MAIN> {
+    type Target = Engine;
+
+    fn deref(&self) -> &Self::Target {
+        &self.engine
     }
 }
 

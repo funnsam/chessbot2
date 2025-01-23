@@ -26,6 +26,12 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
         Self { inner: inner.into() }
     }
 
+    pub fn clear(&mut self) {
+        for e in self.inner.iter_mut() {
+            unsafe { (*e.get()).hash = 0 };
+        }
+    }
+
     pub fn insert(&self, key: u64, value: T) {
         let hash = hash64(&(key, bytemuck::bytes_of(&value)));
         let entry = TableEntry { key, hash, value };
