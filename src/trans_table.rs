@@ -1,4 +1,4 @@
-use crate::{eval::Eval, shared_table::*};
+use crate::{eval::Eval, node::NodeType, shared_table::*};
 
 pub type TransTable = SharedHashTable<TransTableEntry>;
 
@@ -7,14 +7,24 @@ pub type TransTable = SharedHashTable<TransTableEntry>;
 pub struct TransTableEntry {
     pub depth: u8,
     pub eval: Eval,
-    pub node_type: NodeType,
     pub next: chess::ChessMove,
+    /// 2-bit node type
+    pub flags: u8,
+}
+
+impl TransTableEntry {
+    pub fn new_flags(nt: NodeType) -> u8 {
+        nt as u8
+    }
+
+    pub fn node_type(&self) -> NodeType {
+        match self.flags & 3 {
+            0 => NodeType::Pv,
+            1 => NodeType::All,
+            2 => NodeType::Cut,
+            _ => NodeType::None,
+        }
+    }
 }
 
 unsafe impl bytemuck::NoUninit for TransTableEntry {}
-
-#[repr(u8)]
-#[derive(Default, Debug, Clone, Copy, bytemuck::NoUninit, PartialEq, Eq)]
-pub enum NodeType {
-    #[default] Exact, UpperBound, LowerBound, None
-}

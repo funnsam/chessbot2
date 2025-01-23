@@ -1,5 +1,7 @@
 use core::str::FromStr;
 
+use chess::{Color, Piece};
+
 #[derive(Clone)]
 pub struct Game {
     board: chess::Board,
@@ -56,6 +58,32 @@ impl Game {
         }
 
         self.fifty_move_counter >= 100
+    }
+
+    pub fn is_sufficient_material(&self) -> bool {
+        let wp = self.piece_count(Color::White, Piece::Pawn);
+        let bp = self.piece_count(Color::Black, Piece::Pawn);
+        let wn = self.piece_count(Color::White, Piece::Knight);
+        let bn = self.piece_count(Color::Black, Piece::Knight);
+        let wb = self.piece_count(Color::White, Piece::Bishop);
+        let bb = self.piece_count(Color::Black, Piece::Bishop);
+        let wr = self.piece_count(Color::White, Piece::Rook);
+        let br = self.piece_count(Color::Black, Piece::Rook);
+        let wq = self.piece_count(Color::White, Piece::Queen);
+        let bq = self.piece_count(Color::Black, Piece::Queen);
+
+        wp != 0 || bp != 0 ||
+        wr != 0 || br != 0 ||
+        wq != 0 || bq != 0 ||
+        (wp.min(1) + wn.min(1) + wb.min(1) + wr.min(1) + wq.min(1) >= 2) ||
+        (bp.min(1) + bn.min(1) + bb.min(1) + br.min(1) + bq.min(1) >= 2) ||
+        wn >= 2 || bn >= 2 ||
+        (wb == 1 && (bp != 0 || bn != 0)) ||
+        (bb == 1 && (wp != 0 || wn != 0))
+    }
+
+    fn piece_count(&self, color: Color, piece: Piece) -> u32 {
+        (self.board().color_combined(color) & self.board().pieces(piece)).popcnt()
     }
 
     pub fn history_len(&self) -> usize { self.hash_history.len() }

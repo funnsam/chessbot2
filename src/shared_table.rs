@@ -26,6 +26,12 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
         Self { inner: inner.into() }
     }
 
+    pub fn clear(&mut self) {
+        for e in self.inner.iter_mut() {
+            unsafe { (*e.get()).hash = 0 };
+        }
+    }
+
     pub fn insert(&self, key: u64, value: T) {
         let hash = hash64(&(key, bytemuck::bytes_of(&value)));
         let entry = TableEntry { key, hash, value };
@@ -37,6 +43,13 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
         let value = entry.value;
 
         (entry.key == key && entry.hash == hash64(&(key, bytemuck::bytes_of(&value)))).then_some(value)
+    }
+
+    pub fn get_place(&self, key: u64) -> Option<T> {
+        let entry = unsafe { (*self.inner[key as usize % self.inner.len()].get()).clone() };
+        let value = entry.value;
+
+        (entry.hash == hash64(&(key, bytemuck::bytes_of(&value)))).then_some(value)
     }
 
     pub fn filter_count<F: Fn(T) -> bool>(&self, filter: F) -> usize {

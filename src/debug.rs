@@ -36,7 +36,11 @@ impl RelaxedCounter {
     }
 
     pub fn inc(&self) {
-        self.0.fetch_add(1, Ordering::Relaxed);
+        self.add(1)
+    }
+
+    pub fn add(&self, val: usize) {
+        self.0.fetch_add(val, Ordering::Relaxed);
     }
 }
 
@@ -48,7 +52,7 @@ macro_rules! debugs {
         }
 
         impl DebugStats {
-            pub fn reset(&self) {
+            pub fn clear(&self) {
                 $(self.$name.reset();)*
             }
         }

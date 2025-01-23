@@ -1,5 +1,5 @@
 [workspace]
-members = ["chess", "chessbot2-lichess","chessbot2-uci"]
+members = ["chessbot2-lichess","chessbot2-uci"]
 
 [package]
 name = "chessbot2"
@@ -12,6 +12,7 @@ bytemuck = { version = "1.20.0", features = ["derive"] }
 chess = { version = "4.0.0", path = "chess" }
 fastrand = "2.3.0"
 fxhash = "0.2.1"
+parking_lot = "0.12.3"
 
 [profile.release-debuginfo]
 inherits = "release"
@@ -38,3 +39,9 @@ opt-level = 3
 opt-level = 3
 [profile.test.build-override]
 opt-level = 3
+
+[package.metadata.release]
+pre-release-replacements = [
+    { file="CHANGELOG.md", search="# Unreleased", replace="# {{version}}" },
+    { file="CHANGELOG.md", search="<!-- updated by cargo-release -->", replace="<!-- updated by cargo-release -->\n\n# Unreleased" },
+]

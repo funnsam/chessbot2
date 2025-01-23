@@ -1,7 +1,6 @@
 use core::cmp::*;
+use crate::{trans_table::TransTableEntry, Game};
 use core::cell::UnsafeCell;
-use crate::trans_table::TransTableEntry;
-use crate::Game;
 use crate::eval::PIECE_VALUE;
 use chess::ChessMove;
 
@@ -64,8 +63,15 @@ pub type HistoryTable = ButterflyTable<isize>;
 pub type KillerTable = ButterflyTable<isize>;
 pub type CountermoveTable = ButterflyTable<ChessMove>;
 
-impl crate::Engine {
-    pub(crate) fn move_score(&self, prev_move: ChessMove, tte: &Option<TransTableEntry>, m: ChessMove, game: &Game, killer: &KillerTable) -> i32 {
+impl<const MAIN: bool> crate::SmpThread<'_, MAIN> {
+    pub(crate) fn move_score(
+        &self,
+        m: ChessMove,
+        prev_move: ChessMove,
+        game: &Game,
+        tte: &Option<TransTableEntry>,
+        killer: &KillerTable,
+    ) -> i32 {
         if tte.is_some_and(|tte| tte.next == m) {
             i32::MAX
         } else if game.is_capture(m) {
