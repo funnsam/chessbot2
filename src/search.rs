@@ -255,6 +255,8 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
             let can_reduce = depth >= 3 && !in_check && children_searched != 0;
 
             let mut eval = Eval(i16::MIN);
+            self.trans_table.prefetch(game.board().get_hash(), 3);
+
             let do_full_research = if can_reduce {
                 eval = -self.zw_search::<Node::Zw>(m, &game, &killer, depth / 2, ply + 1, -alpha);
 

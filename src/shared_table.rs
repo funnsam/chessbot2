@@ -1,4 +1,5 @@
 use core::cell::UnsafeCell;
+use std::intrinsics::prefetch_read_data;
 use bytemuck::*;
 use fxhash::hash64;
 
@@ -62,6 +63,11 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
     }
 
     pub fn size(&self) -> usize { self.inner.len() }
+
+    pub fn prefetch(&self, key: u64, locality: i32) {
+        let entry = self.inner[key as usize % self.inner.len()].get();
+        unsafe { prefetch_read_data(entry, locality) };
+    }
 }
 
 #[test]

@@ -1,3 +1,6 @@
+#![allow(internal_features)]
+#![feature(core_intrinsics)]
+
 pub use eval::{Eval, evaluate_static};
 pub use game::Game;
 pub use see::see;
