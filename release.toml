@@ -1,0 +1,4 @@
+release = false
+shared-version = true
+publish = false
+verify = false
