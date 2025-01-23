@@ -2,6 +2,19 @@ use crate::*;
 
 use chessbot2::Engine;
 
+fn print_uci_info() {
+    println!("id name chessbot2 v{VERSION}");
+    println!("id author funnsam");
+    println!(
+        "option name Hash type spin default {DEFAULT_HASH_SIZE_MB} min 1 max {}",
+        usize::MAX,
+    );
+    println!(
+        "option name Threads type spin default {DEFAULT_THREADS} min 1 max {}",
+        usize::MAX - 1,
+    );
+}
+
 pub struct State {
     engine: Engine,
     debug_mode: bool,
@@ -21,10 +34,7 @@ impl State {
     pub fn handle_command<'a>(&mut self, command: Option<uci::UciCommand<'a>>) {
         match command {
             Some(uci::UciCommand::Uci) => {
-                println!("id name chessbot1 v{VERSION}");
-                println!("id author funnsam");
-                println!("option name Hash type spin default {DEFAULT_HASH_SIZE_MB} min 1 max {USIZE_MAX}");
-                println!("option name Threads type spin default {DEFAULT_THREADS} min 1 max {USIZE_MAX}");
+                print_uci_info();
                 println!("uciok");
             },
             Some(uci::UciCommand::SetOption(name, value)) => match name.to_ascii_lowercase().as_str() {

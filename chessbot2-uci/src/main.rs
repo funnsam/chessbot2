@@ -1,6 +1,5 @@
 #![feature(str_split_whitespace_remainder)]
 
-use core::usize::MAX as USIZE_MAX;
 use std::{io::BufRead, str::FromStr};
 use chessbot2::*;
 
