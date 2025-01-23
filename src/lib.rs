@@ -25,7 +25,8 @@ pub struct Engine {
     trans_table: trans_table::TransTable,
 
     time_ref: Instant,
-    time_usable: Duration,
+    soft_time_bound: Duration,
+    hard_time_bound: Duration,
     can_time_out: AtomicBool,
 
     debug: debug::DebugStats,
@@ -56,7 +57,8 @@ impl Engine {
             trans_table: trans_table::TransTable::new(hash_size_bytes / trans_table::TransTable::entry_size()),
 
             time_ref: Instant::now(),
-            time_usable: Duration::default(),
+            soft_time_bound: Duration::default(),
+            hard_time_bound: Duration::default(),
             can_time_out: AtomicBool::new(true),
 
             debug: debug::DebugStats::default(),
@@ -116,29 +118,30 @@ impl Engine {
     }
 
     pub fn time_control(&mut self, moves_to_go: Option<usize>, time_ctrl: TimeControl) {
-        let left = time_ctrl.time_left as u64;
-        let incr = time_ctrl.time_incr as u64;
+        let left = Duration::from_millis(time_ctrl.time_left as _);
+        let incr = Duration::from_millis(time_ctrl.time_incr as _);
 
-        self.time_usable = Duration::from_millis(if let Some(mtg) = moves_to_go {
-            left / mtg as u64 + incr
+        if let Some(mtg) = moves_to_go {
+            todo!()
+            // self.soft_time_bound = left / mtg as u32 + incr / 2;
+            // self.hard_time_bound = left * 2 / mtg as u32 + incr;
         } else {
-            let mut think_time = left / 40;
-
-            if left > incr << 2 {
-                think_time += incr * 4 / 5;
-            }
-
-            let min_think = (left / 4).min(50);
-            min_think.max(think_time)
-        });
+            self.soft_time_bound = left / 55 + if left > incr * 4 { incr * 3 / 5 } else { Duration::ZERO };
+            self.hard_time_bound = self.soft_time_bound * 3 / 2;
+        }
     }
 
     pub fn allow_for(&mut self, time: Duration) {
-        self.time_usable = time;
+        self.soft_time_bound = time;
+        self.hard_time_bound = time;
     }
 
-    pub fn times_up(&self) -> bool {
-        self.can_time_out.load(Ordering::Relaxed) && self.elapsed() > self.time_usable
+    pub fn soft_times_up(&self) -> bool {
+        self.can_time_out.load(Ordering::Relaxed) && self.elapsed() > self.soft_time_bound
+    }
+
+    pub fn hard_times_up(&self) -> bool {
+        self.can_time_out.load(Ordering::Relaxed) && self.elapsed() > self.hard_time_bound
     }
 
     pub fn find_pv(&self, best: chess::ChessMove, max: usize) -> Vec<chess::ChessMove> {

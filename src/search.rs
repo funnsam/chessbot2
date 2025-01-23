@@ -17,7 +17,7 @@ impl Engine {
         let prev = main_thread.root_search(1, Eval::MIN, Eval::MAX);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
         let mut prev = (prev.0, prev.1, 1);
-        if !cont(self, prev) { return prev };
+        if !cont(self, prev) || self.soft_times_up() { return prev };
 
         *self.smp_prev.lock() = prev.1;
         self.smp_abort.initiate_wait();
@@ -30,10 +30,10 @@ impl Engine {
         for depth in 2..=255 {
             let this = main_thread.root_aspiration(depth, prev.1);
 
-            if self.times_up() { break };
+            if self.hard_times_up() { break };
 
             prev = (this.0, this.1, depth);
-            if !cont(self, prev) { break };
+            if !cont(self, prev) || self.soft_times_up() { break };
         }
 
         self.smp_abort.initiate();
@@ -95,7 +95,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
         if !MAIN {
             self.smp_abort.initiated()
         } else {
-            self.times_up()
+            self.hard_times_up()
         }
     }
 
