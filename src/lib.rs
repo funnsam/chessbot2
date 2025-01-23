@@ -20,6 +20,8 @@ mod shared_table;
 mod sync;
 mod trans_table;
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub struct Engine {
     pub game: RwLock<Game>,
     trans_table: trans_table::TransTable,
