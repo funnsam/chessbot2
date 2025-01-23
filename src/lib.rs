@@ -121,14 +121,10 @@ impl Engine {
         let left = Duration::from_millis(time_ctrl.time_left as _);
         let incr = Duration::from_millis(time_ctrl.time_incr as _);
 
-        if let Some(mtg) = moves_to_go {
-            todo!()
-            // self.soft_time_bound = left / mtg as u32 + incr / 2;
-            // self.hard_time_bound = left * 2 / mtg as u32 + incr;
-        } else {
-            self.soft_time_bound = left / 55 + if left > incr * 4 { incr * 3 / 5 } else { Duration::ZERO };
-            self.hard_time_bound = self.soft_time_bound * 3 / 2;
-        }
+        let mtg = moves_to_go.unwrap_or(40) as u32;
+
+        self.soft_time_bound = left / mtg + if left > incr * 4 { incr * 3 / 5 } else { Duration::ZERO };
+        self.hard_time_bound = self.soft_time_bound * 3 / 2;
     }
 
     pub fn allow_for(&mut self, time: Duration) {
