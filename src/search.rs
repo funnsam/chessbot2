@@ -1,76 +1,159 @@
 use core::sync::atomic::Ordering;
+
 use crate::{*, eval::*, trans_table::*};
-use chess::{BoardStatus, ChessMove, MoveGen};
-use move_order::KillerTable;
+use chess::{BoardStatus, ChessMove, MoveGen, Piece};
+use node::{Cut, NodeType, Pv};
+use tables::KillerTable;
 
 impl Engine {
-    pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&self, mut cont: F) -> (ChessMove, Eval, usize) {
-        *self.time_ref.write().unwrap() = Instant::now();
-        self.nodes_searched.store(0, Ordering::Relaxed);
-        self.hist_table.clear();
+    pub fn best_move<F: FnMut(&Self, (ChessMove, Eval, usize)) -> bool>(&mut self, mut cont: F) -> (ChessMove, Eval, usize) {
+        self.time_ref = Instant::now();
+        self.total_nodes_searched.store(0, Ordering::Relaxed);
+        self.debug.clear();
+
+        let mut main_thread = self.new_thread::<true>(0);
 
         let can_time_out = self.can_time_out.swap(false, Ordering::Relaxed);
-        let prev = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), 1, 0, Eval::MIN, Eval::MAX, false);
-        let mut prev = (prev.0, prev.1, 1);
+        let prev = main_thread.root_search(1, Eval::MIN, Eval::MAX);
         self.can_time_out.store(can_time_out, Ordering::Relaxed);
-        if !cont(self, prev.clone()) { return prev };
+        let mut prev = (prev.0, prev.1, 1);
+        if !cont(self, prev) { return prev };
+
+        *self.smp_prev.lock() = prev.1;
+        self.smp_abort.initiate_wait();
+
+        let mut sum = 0;
+        while sum < self.smp_count {
+            sum += self.smp_start.notify_all();
+        }
 
         for depth in 2..=255 {
-            let this = self._evaluate_search(ChessMove::default(), &self.game, &KillerTable::new(), depth, 0, Eval::MIN, Eval::MAX, false);
+            let this = main_thread.root_aspiration(depth, prev.1);
+
             if self.times_up() { break };
 
             prev = (this.0, this.1, depth);
-            if !cont(self, prev.clone()) { break };
+            if !cont(self, prev) { break };
         }
 
+        self.smp_abort.initiate();
+        println!("{:#?}", self.debug);
         prev
+    }
+}
+
+impl SmpThread<'_, false> {
+    pub fn start(mut self) {
+        while !self.smp_exit.initiated() {
+            self.smp_abort.always_wait();
+
+            let mut prev = {
+                let mut lock = self.smp_prev.lock();
+                self.smp_start.wait(&mut lock);
+
+                *lock
+            };
+
+            for depth in 2..=255 {
+                prev = self.root_aspiration(depth, prev).1;
+                if self.abort() { break };
+            }
+        }
+    }
+}
+
+impl<const MAIN: bool> SmpThread<'_, MAIN> {
+    fn root_aspiration(&mut self, depth: usize, prev: Eval) -> (ChessMove, Eval) {
+        let (alpha, beta) = (prev - 25, prev + 25);
+        let (mov, eval, nt) = self.root_search(depth, alpha, beta);
+
+        if nt != NodeType::Pv {
+            let (mov, eval, _) = self.root_search(depth, Eval::MIN, Eval::MAX);
+            (mov, eval)
+        } else { (mov, eval) }
     }
 
     #[inline]
-    fn zw_search(
-        &self,
+    fn root_search(
+        &mut self,
+        depth: usize,
+        alpha: Eval,
+        beta: Eval,
+    ) -> (ChessMove, Eval, NodeType) {
+        self.nodes_searched = 0;
+
+        let game: Game = self.game.read().clone();
+        let (next, eval, nt) = self._evaluate_search::<Pv, true>(ChessMove::default(), &game, &mut KillerTable::new(), depth, 0, alpha, beta, false);
+
+        self.store_tt(depth, &game, (next, eval, nt));
+        self.total_nodes_searched.fetch_add(self.nodes_searched, Ordering::Relaxed);
+
+        (next, eval, nt)
+    }
+
+    fn abort(&self) -> bool {
+        if !MAIN {
+            self.smp_abort.initiated()
+        } else {
+            self.times_up()
+        }
+    }
+
+    #[inline]
+    fn zw_search<Node: node::Node>(
+        &mut self,
         prev_move: ChessMove,
         game: &Game,
-        killer: &KillerTable,
+        killer: &mut KillerTable,
         depth: usize,
         ply: usize,
         beta: Eval,
     ) -> Eval {
-        self.evaluate_search(prev_move, game, killer, depth, ply, Eval(beta.0 - 1), beta, true)
+        self.evaluate_search::<Node>(prev_move, game, killer, depth, ply, beta - 1, beta, true)
     }
 
     /// Perform an alpha-beta (fail-soft) negamax search and return the evaluation
     #[inline]
-    fn evaluate_search(
-        &self,
+    fn evaluate_search<Node: node::Node>(
+        &mut self,
         prev_move: ChessMove,
         game: &Game,
-        killer: &KillerTable,
+        killer: &mut KillerTable,
         depth: usize,
         ply: usize,
         alpha: Eval,
         beta: Eval,
         in_zw: bool,
     ) -> Eval {
-        let (next, eval, nt) = self._evaluate_search(prev_move, game, killer, depth, ply, alpha, beta, in_zw);
+        let (next, eval, nt) = self._evaluate_search::<Node, false>(prev_move, game, killer, depth, ply, alpha, beta, in_zw);
 
-        if nt != NodeType::None && !self.times_up() {
-            self.trans_table.insert(game.board().get_hash(), TransTableEntry {
-                depth: depth as u8,
-                eval,
-                node_type: nt,
-                next,
-            });
-        }
+        self.store_tt(depth, game, (next, eval, nt));
 
         eval
     }
 
-    fn _evaluate_search(
-        &self,
+    fn store_tt(&self, depth: usize, game: &Game, (next, eval, nt): (ChessMove, Eval, NodeType)) {
+        if nt != NodeType::None && !self.abort() {
+            if let Some(tte) = self.trans_table.get_place(game.board().get_hash()) {
+                if tte.depth as usize > depth {
+                    return;
+                }
+            }
+
+            self.trans_table.insert(game.board().get_hash(), TransTableEntry {
+                depth: depth as u8,
+                eval,
+                next,
+                flags: TransTableEntry::new_flags(nt),
+            });
+        }
+    }
+
+    fn _evaluate_search<Node: node::Node, const ROOT: bool>(
+        &mut self,
         prev_move: ChessMove,
         game: &Game,
-        p_killer: &KillerTable,
+        p_killer: &mut KillerTable,
         depth: usize,
         ply: usize,
         mut alpha: Eval,
@@ -81,13 +164,16 @@ impl Engine {
             return (ChessMove::default(), Eval(0), NodeType::None);
         }
 
-        if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
-            let eval = trans.eval;
+        if !Node::PV {
+            if let Some(trans) = self.trans_table.get(game.board().get_hash()) {
+                let eval = trans.eval;
+                let node_type = trans.node_type();
 
-            if trans.depth as usize >= depth && (trans.node_type == NodeType::Exact
-                || (trans.node_type == NodeType::LowerBound && eval >= beta)
-                || (trans.node_type == NodeType::UpperBound && eval < alpha)) {
-                return (trans.next, eval, NodeType::None);
+                if trans.depth as usize >= depth && (node_type == NodeType::Pv
+                    || (node_type == NodeType::Cut && eval >= beta)
+                    || (node_type == NodeType::All && eval < alpha)) {
+                    return (trans.next, eval, NodeType::None);
+                }
             }
         }
 
@@ -97,99 +183,162 @@ impl Engine {
             BoardStatus::Stalemate => return (ChessMove::default(), Eval(0), NodeType::None),
         }
 
-        if self.times_up() {
+        if self.abort() {
             return (ChessMove::default(), Eval(0), NodeType::None);
         }
 
         if depth == 0 {
-            return (ChessMove::default(), self.quiescence_search(game, alpha, beta), NodeType::Exact);
+            return (ChessMove::default(), self.quiescence_search(game, alpha, beta), NodeType::None);
         }
 
-        let killer = KillerTable::new();
+        let mut killer = KillerTable::new();
+
+        // internal iterative reductions
+        if !ROOT && depth >= 4 && self.trans_table.get(game.board().get_hash()).is_none() {
+            let low = self._evaluate_search::<Node, ROOT>(prev_move, game, &mut killer, depth / 4, ply, alpha, beta, false);
+            self.store_tt(depth / 4, game, low);
+
+            if low.1 <= alpha {
+                return (low.0, low.1, NodeType::None);
+            }
+        }
+
         let in_check = game.board().checkers().0 != 0;
 
-        if ply != 0 && !in_check && depth > 3 && !in_zw {
+        // null move pruning
+        if ply != 0 && !in_check && depth > 3 && !Node::PV && (
+            game.board().pieces(Piece::Knight).0 != 0 ||
+            game.board().pieces(Piece::Bishop).0 != 0 ||
+            game.board().pieces(Piece::Rook).0 != 0 ||
+            game.board().pieces(Piece::Queen).0 != 0
+        ) {
             let game = game.make_null_move().unwrap();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let eval = -self.zw_search(prev_move, &game, &killer, depth - r, ply + 1, Eval(1 - beta.0));
+            let eval = -self.zw_search::<Cut>(prev_move, &game, &mut killer, depth - r, ply + 1, 1 - beta);
 
             if eval >= beta {
                 return (ChessMove::default(), eval.incr_mate(), NodeType::None);
             }
         }
 
-        let mut moves = MoveGen::new_legal(game.board()).collect::<arrayvec::ArrayVec<_, 256>>();
-        self.order_moves(prev_move, &mut moves, game, &p_killer);
-        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
+        let tte = self.trans_table.get(game.board().get_hash());
+        let prev_piece = game.board().piece_on(prev_move.get_dest()).unwrap_or(Piece::Pawn);
 
-        let _game = &game;
-        let prev_piece = _game.board().piece_on(prev_move.get_dest()).unwrap();
+        let mut moves = MoveGen::new_legal(game.board())
+            .map(|m| (m, self.move_score(m, prev_move, prev_piece, game, &tte, &p_killer)))
+            .collect::<arrayvec::ArrayVec<_, 256>>();
+        moves.sort_unstable_by_key(|i| -i.1);
+        if ROOT && !MAIN {
+            let len = moves.len();
+            moves.rotate_left((self.index / 2) % len);
+        }
 
         let mut best = (ChessMove::default(), Eval::MIN);
-        for (i, m) in moves.into_iter().enumerate() {
+        let mut children_searched = 0;
+        let _game = &game;
+        for (i, (m, _)) in moves.iter().copied().enumerate() {
             let game = _game.make_move(m);
-
-            let this_depth = if depth < 3 || in_check || i < 1 || game.board().checkers().0 != 0 { depth - 1 } else { depth / 2 };
 
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
                 let eval = -evaluate_static(game.board());
-                let margin = 100 * depth as i16 * depth as i16  ;
+                let margin = 100 * depth as i16 * depth as i16;
 
                 if eval.0 + margin < alpha.0 {
                     if best.0 == ChessMove::default() {
-                        best = (m, Eval(eval.0 - margin));
+                        best = (m, eval - margin);
                     }
 
                     continue;
                 }
             }
 
-            let mut eval = -self.evaluate_search(m, &game, &killer, this_depth, ply + 1, -beta, -alpha, in_zw);
-            if self.times_up() { return (best.0, best.1.incr_mate(), NodeType::None); }
+            let can_reduce = depth >= 3 && !in_check && children_searched != 0;
 
-            if this_depth < depth - 1 && best.1 < eval {
-                let new = -self.evaluate_search(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
+            let mut eval = Eval(i16::MIN);
+            let do_full_research = if can_reduce {
+                eval = -self.zw_search::<Node::Zw>(m, &game, &mut killer, depth / 2, ply + 1, -alpha);
 
-                if !self.times_up() {
-                    eval = new;
+                if alpha < eval && depth / 2 < depth - 1 {
+                    self.debug.research.inc();
+                } else {
+                    self.debug.no_research.inc();
+                }
+
+                alpha < eval && depth / 2 < depth - 1
+            } else {
+                !Node::PV || children_searched != 0
+            };
+
+            if do_full_research {
+                eval = -self.zw_search::<Node::Zw>(m, &game, &mut killer, depth - 1, ply + 1, -alpha);
+                self.debug.all_full_zw.inc();
+            }
+
+            if Node::PV && (children_searched == 0 || alpha < eval) {
+                eval = -self.evaluate_search::<Pv>(m, &game, &mut killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
+
+                self.debug.all_full.inc();
+                if do_full_research {
+                    self.debug.full.inc();
                 }
             }
+
+            if self.abort() { return (best.0, best.1.incr_mate(), NodeType::None) };
+            self.nodes_searched += 1;
+
+            // if ROOT {
+            //     println!(" {m} {eval} α{alpha} β{beta} {:?}", self.find_pv(m, 100).into_iter().map(|i| i.to_string()).collect::<Vec<_>>());
+            // }
 
             if eval > best.1 || best.0 == ChessMove::default() {
                 best = (m, eval);
                 alpha = alpha.max(eval);
             }
             if eval >= beta {
-                if _game.board().piece_on(m.get_dest()).is_none() {
-                    p_killer.update(m, depth);
-                    self.hist_table.update(m, depth);
-                    *self.countermove.get_mut(prev_move) = m;
-                    self.cm_history.update(prev_piece, prev_move.get_dest(), m, depth);
+                if !_game.is_capture(m) {
+                    let bonus = 300 * depth as isize - 250;
+
+                    for (m, _) in moves[..i].into_iter() {
+                        if !_game.is_capture(*m) {
+                            self.hist_table.update(*m, -bonus);
+                            p_killer.update(*m, -bonus);
+                        }
+                    }
+
+                    self.hist_table.update(m, bonus);
+                    p_killer.update(m, bonus);
+                    self.countermove[prev_move] = m;
+
+                    let piece = _game.board().piece_on(m.get_source()).unwrap();
+                    self.cm_history[(prev_piece, prev_move.get_dest())].update(piece, m.get_dest(), bonus);
                 }
 
-                return (best.0, best.1.incr_mate(), NodeType::LowerBound);
+                return (best.0, best.1.incr_mate(), NodeType::Cut);
             }
+
+            children_searched += 1;
         }
 
-        (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::UpperBound } else { NodeType::Exact })
+        (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::All } else { NodeType::Pv })
     }
 
-    fn quiescence_search(&self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
+    fn quiescence_search(&mut self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
         let standing_pat = evaluate_static(game.board());
+        // TODO: failing to standing pat makes sprt fail, need investigation
         if standing_pat >= beta { return beta; }
         alpha = alpha.max(standing_pat);
         let mut best = standing_pat;
 
         let mut moves = MoveGen::new_legal(game.board());
         moves.set_iterator_mask(*game.board().combined());
-        self.nodes_searched.fetch_add(moves.len(), Ordering::Relaxed);
 
         for m in moves {
             if see(game, m) < 0 { continue };
 
             let game = game.make_move(m);
             let eval = -self.quiescence_search(&game, -beta, -alpha);
+            self.nodes_searched += 1;
 
             if eval > best {
                 best = eval;

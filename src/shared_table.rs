@@ -26,8 +26,14 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
         Self { inner: inner.into() }
     }
 
+    pub fn clear(&mut self) {
+        for e in self.inner.iter_mut() {
+            unsafe { (*e.get()).hash = 0 };
+        }
+    }
+
     pub fn insert(&self, key: u64, value: T) {
-        let hash = hash64(&bytemuck::bytes_of(&value));
+        let hash = hash64(&(key, bytemuck::bytes_of(&value)));
         let entry = TableEntry { key, hash, value };
         unsafe { *self.inner[key as usize % self.inner.len()].get() = entry; }
     }
@@ -36,7 +42,14 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
         let entry = unsafe { (*self.inner[key as usize % self.inner.len()].get()).clone() };
         let value = entry.value;
 
-        (entry.key == key && entry.hash == hash64(&bytemuck::bytes_of(&value))).then_some(value)
+        (entry.key == key && entry.hash == hash64(&(key, bytemuck::bytes_of(&value)))).then_some(value)
+    }
+
+    pub fn get_place(&self, key: u64) -> Option<T> {
+        let entry = unsafe { (*self.inner[key as usize % self.inner.len()].get()).clone() };
+        let value = entry.value;
+
+        (entry.hash == hash64(&(key, bytemuck::bytes_of(&value)))).then_some(value)
     }
 
     pub fn filter_count<F: Fn(T) -> bool>(&self, filter: F) -> usize {
@@ -49,4 +62,22 @@ impl<T: Default + Clone + Sized + Send + Sync + NoUninit> SharedHashTable<T> {
     }
 
     pub fn size(&self) -> usize { self.inner.len() }
+}
+
+#[test]
+fn test_shared_table() {
+    let st = std::sync::Arc::new(SharedHashTable::<usize>::new(10));
+
+    st.insert(0, 123);
+    assert_eq!(st.get(0), Some(123));
+    st.insert(10, 123);
+    assert_eq!(st.get(10), Some(123));
+    assert_eq!(st.get(0), None);
+
+    {
+        let st = std::sync::Arc::clone(&st);
+        std::thread::spawn(move || st.insert(1, 789)).join().unwrap();
+    }
+
+    assert_eq!(st.get(1), Some(789));
 }
