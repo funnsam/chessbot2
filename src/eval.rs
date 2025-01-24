@@ -141,8 +141,7 @@ pub struct EvalParamList<T> {
 
 impl Default for EvalParams {
     fn default() -> Self {
-        postcard::from_bytes(include_bytes!("eval_params.bin")).unwrap_or_else(|_| {
-
+        include_optional::include_bytes_optional!("eval_params.bin").map_or_else(|| {
             Self {
                 pst_mid: Pst(core::array::from_fn(|i| {
                     params::PIECE_SQUARE_TABLE_MID[i] + params::PIECE_VALUE_MID[i / 64]
@@ -154,7 +153,7 @@ impl Default for EvalParams {
                 king_pawn_penalty: 15,
                 king_open_file_penalty: 5,
             }
-        })
+        }, |b| postcard::from_bytes(b).unwrap())
     }
 }
 
