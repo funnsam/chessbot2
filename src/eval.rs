@@ -149,9 +149,9 @@ impl Default for EvalParams {
                 pst_end: Pst(core::array::from_fn(|i| {
                     params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]
                 })),
-                rook_open_file_bonus: 20,
-                king_pawn_penalty: 15,
-                king_open_file_penalty: 5,
+                rook_open_file_bonus: 31,
+                king_pawn_penalty: -65,
+                king_open_file_penalty: -6,
             }
         }, |b| postcard::from_bytes(b).unwrap())
     }
@@ -262,22 +262,24 @@ impl EvalParams {
             let color = unsafe { board.color_on(square).unwrap_unchecked() };
 
             // rook on open file bonus
-            let rook_on_open_file = (piece == Piece::Rook
-                && (board.pieces(Piece::Pawn) & chess::get_file(square.get_file())).0 == 0
+            let rook_on_open_file = (
+                piece == Piece::Rook && is_open_file(board, square.get_file())
             ) as i16 * self.rook_open_file_bonus;
+
+            // pawn shield penalty
             let pawn_shield = if piece == Piece::King {
                 let mut open_files = 0;
                 if let Some(sq) = square.left() {
-                    open_files += ((board.pieces(Piece::Pawn) & board.color_combined(color) & chess::get_file(sq.get_file())).0 == 0) as i16;
+                    open_files += is_semi_open_file(board, color, sq.get_file()) as i16;
                 }
                 if let Some(sq) = square.right() {
-                    open_files += ((board.pieces(Piece::Pawn) & board.color_combined(color) & chess::get_file(sq.get_file())).0 == 0) as i16;
+                    open_files += is_semi_open_file(board, color, sq.get_file()) as i16;
                 }
 
                 let king_center = square.uforward(color);
                 let king_pawns = (board.pieces(Piece::Pawn) & (chess::get_king_moves(king_center) | BitBoard::from_square(king_center))).popcnt();
 
-                -(3_i16.saturating_sub(king_pawns as i16) * self.king_pawn_penalty + open_files * self.king_open_file_penalty)
+                3_i16.saturating_sub(king_pawns as i16) * self.king_pawn_penalty + open_files * self.king_open_file_penalty
             } else { 0 };
 
             let p = (color, piece, square);
@@ -300,6 +302,15 @@ pub fn game_phase(board: &Board) -> u8 {
         .map(|sq| PIECE_PHASE[unsafe { board.piece_on(sq).unwrap_unchecked() }.to_index()])
         .sum::<u8>()
         .min(MAX_PHASE)
+}
+
+pub fn is_open_file(board: &Board, file: File) -> bool {
+    (board.pieces(Piece::Pawn) & chess::get_file(file)).0 == 0
+}
+
+pub fn is_semi_open_file(board: &Board, color: Color, file: File) -> bool {
+    let our_pawns = board.pieces(Piece::Pawn) & board.color_combined(color);
+    (our_pawns & chess::get_file(file)).0 == 0
 }
 
 /// # Note
