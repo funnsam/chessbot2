@@ -149,9 +149,9 @@ impl Default for EvalParams {
                 pst_end: Pst(core::array::from_fn(|i| {
                     params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]
                 })),
-                rook_open_file_bonus: 31,
-                king_pawn_penalty: -65,
-                king_open_file_penalty: -6,
+                rook_open_file_bonus: 20,
+                king_pawn_penalty: -15,
+                king_open_file_penalty: 0,
             }
         }, |b| postcard::from_bytes(b).unwrap())
     }

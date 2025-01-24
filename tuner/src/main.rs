@@ -3,10 +3,9 @@ use std::{io::BufRead, str::FromStr};
 use chess::{BitBoard, Board, Color, Piece, ALL_PIECES, ALL_SQUARES};
 use chessbot2::eval::{is_open_file, is_semi_open_file, EvalParamList, MAX_PHASE};
 
-const ALPHA: f64 = 0.1;
+const ALPHA: f64 = 0.01;
 const K: f64 = 0.4;
 const BATCH: usize = 50000;
-const MEAN: f64 = 1.0 / BATCH as f64;
 
 fn main() {
     let mut eval_f64 = EvalParamList::<f64>::default();
@@ -25,7 +24,7 @@ fn main() {
 
     println!("{} positions loaded", pos.len());
 
-    for iteration in 0..300 {
+    for iteration in 0..500 {
         let mut eval_collector = EvalParamList::zeroed();
         let mut eval_frequency = EvalParamList::zeroed();
 
@@ -82,8 +81,8 @@ fn main() {
 
             for square in ALL_SQUARES {
                 let p = (Color::White, piece, square);
-                eval_f64.pst_mid[p] -= ALPHA * eval_collector.pst_mid[p] * MEAN;
-                eval_f64.pst_end[p] -= ALPHA * eval_collector.pst_end[p] * MEAN;
+                eval_f64.pst_mid[p] -= ALPHA * eval_collector.pst_mid[p] / eval_frequency.pst_mid[p].max(1.0);
+                eval_f64.pst_end[p] -= ALPHA * eval_collector.pst_end[p] / eval_frequency.pst_end[p].max(1.0);
 
                 mg += eval_f64.pst_mid[p];
                 eg += eval_f64.pst_end[p];
@@ -92,9 +91,9 @@ fn main() {
             println!("{piece:?}: {:.02} {:.02}", mg / 64.0, eg / 64.0);
         }
 
-        eval_f64.rook_open_file_bonus -= ALPHA * eval_collector.rook_open_file_bonus * MEAN;
-        eval_f64.king_pawn_penalty -= ALPHA * eval_collector.king_pawn_penalty * MEAN;
-        eval_f64.king_open_file_penalty -= ALPHA * eval_collector.king_open_file_penalty * MEAN;
+        eval_f64.rook_open_file_bonus   -= ALPHA * eval_collector.rook_open_file_bonus   / eval_frequency.rook_open_file_bonus.max(1.0);
+        eval_f64.king_pawn_penalty      -= ALPHA * eval_collector.king_pawn_penalty      / eval_frequency.king_pawn_penalty.max(1.0);
+        eval_f64.king_open_file_penalty -= ALPHA * eval_collector.king_open_file_penalty / eval_frequency.king_open_file_penalty.max(1.0);
 
         eval_params = eval_f64.round_into_i16();
 
@@ -103,7 +102,7 @@ fn main() {
             let eval = eval_params.evaluate_with(eval_params.get_separated_in_white(board));
             let s = sigmoid(eval.0 as f64 / 100.0);
             let err = *r - s;
-            cost += err * err * MEAN;
+            cost += err * err / 500.0;
         }
         println!("{iteration} {cost}");
     }
