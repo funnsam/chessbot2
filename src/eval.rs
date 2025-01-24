@@ -128,70 +128,115 @@ fn test_eval() {
 
 pub type EvalParams = EvalParamList<i16>;
 
-macro_rules! eval_param_list {
-    (s $($name:tt : $ty:tt),* $(,)?) => {
-        pub struct EvalParamList<T>([T; 0 $(+ eval_param_list!(sizeof $ty))*]);
-
-        impl<T: Copy> EvalParamList<T> {
-            const _SIZES: &[usize] = &[$(eval_param_list!(sizeof $ty)),*];
-
-            pub fn new($($name: eval_param_list!(typeof $ty)),*) -> Self {
-                Self([$(eval_param_list!(to_arr $ty $name)),*].concat().try_into().unwrap_or_else(|_| panic!()))
-            }
-
-            eval_param_list!(getfn 0, $($name $ty),*);
-        }
-    };
-    (getfn $i:expr, $name:tt $ty:tt, $($r:tt)*) => {
-        eval_param_list!(getfn $i, $name $ty);
-        eval_param_list!(getfn $i + 1, $($r)*);
-    };
-    (getfn $i:expr, $name:tt $ty:tt) => {
-        pub fn $name(&self) -> eval_param_list!(typeof $ty) {
-            eval_param_list!(get $ty &self.0[Self::_SIZES[..$i].iter().sum()..])
-        }
-    };
-    (sizeof pst) => { (6 * 64) };
-    (typeof pst) => { &[T; 6 * 64] };
-    (get pst $i:expr) => { (&$i[..6 * 64]).try_into().unwrap() };
-    (to_arr pst $i:expr) => { <&[T] as Into<&[T]>>::into($i) };
-    (sizeof single) => { 1 };
-    (typeof single) => { T };
-    (get single $i:expr) => { $i[0] };
-    (to_arr single $i:expr) => { <&[T] as Into<&[T]>>::into(&[$i]) };
-    (sizeof $size:tt) => { $size };
-    (typeof $size:tt) => { &[T; $size] };
-    (get $size:tt $i:expr) => { (&$i[..$size]).try_into().unwrap() };
-    (to_arr $_size:tt $i:expr) => { <&[T] as Into<&[T]>>::into($i) };
+pub struct EvalParamList<T> {
+    pub pst_mid: Pst<T>,
+    pub pst_end: Pst<T>,
+    pub rook_open_file_bonus: T,
+    pub king_pawn_penalty: T,
+    pub king_open_file_penalty: T,
 }
-
-eval_param_list!(s
-    pst_mid: pst,
-    pst_end: pst,
-    king_pawn_penalty: single,
-    king_open_file_penalty: single,
-);
 
 impl Default for EvalParams {
     fn default() -> Self {
-        let pst_mid = core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_MID[i] + params::PIECE_VALUE_MID[i / 64]);
-        let pst_end = core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]);
-        let king_pawn_penalty = 15;
-        let king_open_file_penalty = 5;
+        let pst_mid = Pst(core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_MID[i] + params::PIECE_VALUE_MID[i / 64]));
+        let pst_end = Pst(core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]));
 
-        Self::new(&pst_mid, &pst_end, king_pawn_penalty, king_open_file_penalty)
+        Self {
+            pst_mid,
+            pst_end,
+            rook_open_file_bonus: 20,
+            king_pawn_penalty: 15,
+            king_open_file_penalty: 5,
+        }
     }
 }
 
-impl Default for EvalParamList<f32> {
+impl Default for EvalParamList<f64> {
     fn default() -> Self {
-        let s = EvalParams::default();
-        Self(core::array::from_fn(|i| s.0[i] as f32))
+        EvalParams::default().to_f64()
     }
 }
+
+impl EvalParams {
+    pub fn to_f64(&self) -> EvalParamList<f64> {
+        EvalParamList {
+            pst_mid: Pst(core::array::from_fn(|i| self.pst_mid.0[i] as _)),
+            pst_end: Pst(core::array::from_fn(|i| self.pst_end.0[i] as _)),
+            rook_open_file_bonus: self.rook_open_file_bonus as _,
+            king_open_file_penalty: self.king_open_file_penalty as _,
+            king_pawn_penalty: self.king_pawn_penalty as _,
+        }
+    }
+}
+
+impl EvalParamList<f64> {
+    pub fn zeroed() -> Self {
+        Self {
+            pst_mid: Pst([0.0; 6 * 64]),
+            pst_end: Pst([0.0; 6 * 64]),
+            rook_open_file_bonus: 0.0,
+            king_open_file_penalty: 0.0,
+            king_pawn_penalty: 0.0,
+        }
+    }
+
+    pub fn round_into_i16(&self) -> EvalParams {
+        EvalParams {
+            pst_mid: Pst(core::array::from_fn(|i| self.pst_mid.0[i].round() as _)),
+            pst_end: Pst(core::array::from_fn(|i| self.pst_end.0[i].round() as _)),
+            rook_open_file_bonus: self.rook_open_file_bonus.round() as _,
+            king_open_file_penalty: self.king_open_file_penalty.round() as _,
+            king_pawn_penalty: self.king_pawn_penalty.round() as _,
+        }
+    }
+}
+
+pub struct Pst<T>(pub [T; 6 * 64]);
+
+impl<T> Pst<T> {
+    fn index_of((color, piece, square): (Color, Piece, Square)) -> usize {
+        let xor = if color == Color::Black { 0b111_000 } else { 0 };
+        (square.to_index() ^ xor) | (piece.to_index() << 6)
+    }
+}
+
+impl<T> core::ops::Index<(Color, Piece, Square)> for Pst<T> {
+    type Output = T;
+
+    fn index(&self, index: (Color, Piece, Square)) -> &Self::Output {
+        &self.0[Self::index_of(index)]
+    }
+}
+
+impl<T> core::ops::IndexMut<(Color, Piece, Square)> for Pst<T> {
+    fn index_mut(&mut self, index: (Color, Piece, Square)) -> &mut Self::Output {
+        &mut self.0[Self::index_of(index)]
+    }
+}
+
 impl EvalParams {
     /// Mostly PeSTO's evaluation with rook on open file bonus
     pub fn evaluate_static(&self, board: &Board) -> Eval {
+        self.evaluate_with(self.get_separated(board))
+    }
+
+    pub fn evaluate_with(&self, (mg_eval, eg_eval, mg_phase): (i16, i16, u8)) -> Eval {
+        let eg_phase = MAX_PHASE - mg_phase;
+
+        Eval(((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / MAX_PHASE as i32) as i16)
+    }
+
+    pub fn get_separated(&self, board: &Board) -> (i16, i16, u8) {
+        let (mg, eg, phase) = self.get_separated_in_white(board);
+
+        if board.side_to_move() == Color::White {
+            (mg, eg, phase)
+        } else {
+            (-mg, -eg, phase)
+        }
+    }
+
+    pub fn get_separated_in_white(&self, board: &Board) -> (i16, i16, u8) {
         let mut mid_game = [0, 0];
         let mut end_game = [0, 0];
         let mut phase = 0;
@@ -204,7 +249,7 @@ impl EvalParams {
             // rook on open file bonus
             let rook_on_open_file = (piece == Piece::Rook
                 && (board.pieces(Piece::Pawn) & chess::get_file(square.get_file())).0 == 0
-            ) as i16 * 20;
+            ) as i16 * self.rook_open_file_bonus;
             let pawn_shield = if piece == Piece::King {
                 let mut open_files = 0;
                 if let Some(sq) = square.left() {
@@ -217,30 +262,29 @@ impl EvalParams {
                 let king_center = square.uforward(color);
                 let king_pawns = (board.pieces(Piece::Pawn) & (chess::get_king_moves(king_center) | BitBoard::from_square(king_center))).popcnt();
 
-                -(3_i16.saturating_sub(king_pawns as i16) * self.king_pawn_penalty() + open_files * self.king_open_file_penalty())
+                -(3_i16.saturating_sub(king_pawns as i16) * self.king_pawn_penalty + open_files * self.king_open_file_penalty)
             } else { 0 };
 
-            let xor = if color == Color::Black { 0b111_000 } else { 0 };
-            let idx = (square.to_index() ^ xor) | (piece.to_index() << 6);
+            let p = (color, piece, square);
 
-            mid_game[color.to_index()] += rook_on_open_file + pawn_shield + self.pst_mid()[idx];
-            end_game[color.to_index()] += rook_on_open_file + self.pst_end()[idx];
+            mid_game[color.to_index()] += rook_on_open_file + pawn_shield + self.pst_mid[p];
+            end_game[color.to_index()] += rook_on_open_file + self.pst_end[p];
             phase += PIECE_PHASE[piece.to_index()];
         }
 
-        let stm = board.side_to_move() as usize;
-        let mg_eval = mid_game[stm] - mid_game[1 - stm];
-        let eg_eval = end_game[stm] - end_game[1 - stm];
-        let mg_phase = phase.min(24);
-        let eg_phase = 24 - mg_phase;
+        let mg_eval = mid_game[0] - mid_game[1];
+        let eg_eval = end_game[0] - end_game[1];
 
-        Eval(((mg_eval as i32 * mg_phase as i32 + eg_eval as i32 * eg_phase as i32) / 24) as i16)
+        (mg_eval, eg_eval, phase.min(MAX_PHASE))
     }
 }
 
 /// Finds the current phase of the game. 0 is endgame and 24 is midgame.
 pub fn game_phase(board: &Board) -> u8 {
-    board.combined().into_iter().map(|sq| PIECE_PHASE[unsafe { board.piece_on(sq).unwrap_unchecked() }.to_index()]).sum::<u8>().min(24)
+    board.combined().into_iter()
+        .map(|sq| PIECE_PHASE[unsafe { board.piece_on(sq).unwrap_unchecked() }.to_index()])
+        .sum::<u8>()
+        .min(MAX_PHASE)
 }
 
 /// # Note
@@ -254,7 +298,8 @@ pub const PIECE_VALUE: [i16; 6] = [
     20000,
 ];
 
-const PIECE_PHASE: [u8; 6] = [0, 1, 1, 2, 4, 0];
+pub const MAX_PHASE: u8 = 24;
+pub const PIECE_PHASE: [u8; 6] = [0, 1, 1, 2, 4, 0];
 
 mod params {
     pub const PIECE_VALUE_MID: [i16; 6] = [82, 337, 365, 477, 1025,  0];

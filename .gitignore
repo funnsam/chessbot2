@@ -2,7 +2,7 @@ target
 *.pgn
 *.epd
 *.zip
-*.csv
+# *.csv
 /config.json
 /engines
 api_key.txt

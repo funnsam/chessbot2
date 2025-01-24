@@ -1,5 +1,5 @@
 [workspace]
-members = ["chessbot2-lichess","chessbot2-uci"]
+members = ["chessbot2-lichess","chessbot2-uci", "tuner"]
 
 [package]
 name = "chessbot2"

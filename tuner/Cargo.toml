@@ -1,0 +1,9 @@
+[package]
+name = "tuner"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chess = { version = "4.0.0", path = "../chess" }
+chessbot2 = { version = "0.1.0", path = ".." }
+fastrand = "2.3.0"

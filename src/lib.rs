@@ -10,7 +10,7 @@ use sync::*;
 use parking_lot::{Condvar, Mutex, RwLock};
 
 mod debug;
-mod eval;
+pub mod eval;
 pub mod game;
 mod move_order;
 mod node;
