@@ -10,7 +10,7 @@ use chess::*;
 ///      min cp   0   max cp
 ///      -16383        16383
 /// ```
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct Eval(pub i16);
 
 impl Eval {
@@ -128,8 +128,11 @@ fn test_eval() {
 
 pub type EvalParams = EvalParamList<i16>;
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EvalParamList<T> {
+    #[serde(bound = "Pst<T>: serde::Serialize + for<'a> serde::Deserialize<'a>")]
     pub pst_mid: Pst<T>,
+    #[serde(bound = "Pst<T>: serde::Serialize + for<'a> serde::Deserialize<'a>")]
     pub pst_end: Pst<T>,
     pub rook_open_file_bonus: T,
     pub king_pawn_penalty: T,
@@ -138,16 +141,20 @@ pub struct EvalParamList<T> {
 
 impl Default for EvalParams {
     fn default() -> Self {
-        let pst_mid = Pst(core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_MID[i] + params::PIECE_VALUE_MID[i / 64]));
-        let pst_end = Pst(core::array::from_fn(|i| params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]));
+        postcard::from_bytes(include_bytes!("eval_params.bin")).unwrap_or_else(|_| {
 
-        Self {
-            pst_mid,
-            pst_end,
-            rook_open_file_bonus: 20,
-            king_pawn_penalty: 15,
-            king_open_file_penalty: 5,
-        }
+            Self {
+                pst_mid: Pst(core::array::from_fn(|i| {
+                    params::PIECE_SQUARE_TABLE_MID[i] + params::PIECE_VALUE_MID[i / 64]
+                })),
+                pst_end: Pst(core::array::from_fn(|i| {
+                    params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]
+                })),
+                rook_open_file_bonus: 20,
+                king_pawn_penalty: 15,
+                king_open_file_penalty: 5,
+            }
+        })
     }
 }
 
@@ -191,16 +198,23 @@ impl EvalParamList<f64> {
     }
 }
 
-pub struct Pst<T>(pub [T; 6 * 64]);
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Pst<T>(
+    #[serde(with = "serde_big_array::BigArray")]
+    #[serde(bound = "T: serde::Serialize + for<'a> serde::Deserialize<'a>")]
+    pub [T; 6 * 64]
+);
 
-impl<T> Pst<T> {
+impl<T: serde::Serialize + for<'a> serde::Deserialize<'a>> Pst<T> {
     fn index_of((color, piece, square): (Color, Piece, Square)) -> usize {
         let xor = if color == Color::Black { 0b111_000 } else { 0 };
         (square.to_index() ^ xor) | (piece.to_index() << 6)
     }
 }
 
-impl<T> core::ops::Index<(Color, Piece, Square)> for Pst<T> {
+impl<T> core::ops::Index<(Color, Piece, Square)> for Pst<T> where
+    T: serde::Serialize + for<'a> serde::Deserialize<'a>
+{
     type Output = T;
 
     fn index(&self, index: (Color, Piece, Square)) -> &Self::Output {
@@ -208,7 +222,9 @@ impl<T> core::ops::Index<(Color, Piece, Square)> for Pst<T> {
     }
 }
 
-impl<T> core::ops::IndexMut<(Color, Piece, Square)> for Pst<T> {
+impl<T> core::ops::IndexMut<(Color, Piece, Square)> for Pst<T> where
+    T: serde::Serialize + for<'a> serde::Deserialize<'a>
+{
     fn index_mut(&mut self, index: (Color, Piece, Square)) -> &mut Self::Output {
         &mut self.0[Self::index_of(index)]
     }

@@ -3,7 +3,7 @@ use std::{io::BufRead, str::FromStr};
 use chess::{Board, Color, ALL_PIECES, ALL_SQUARES};
 use chessbot2::eval::{EvalParamList, MAX_PHASE};
 
-const ALPHA: f64 = 0.1;
+const ALPHA: f64 = 1.0;
 const K: f64 = 0.4;
 const BATCH: usize = 50000;
 const MEAN: f64 = 1.0 / BATCH as f64;
@@ -48,8 +48,9 @@ fn main() {
                 let color = unsafe { board.color_on(square).unwrap_unchecked() };
 
                 let p = (color, piece, square);
-                eval_collector.pst_mid[p] += 100.0 * d_mid;
-                eval_collector.pst_end[p] += 100.0 * d_end;
+                let c = if color == Color::White { 1.0 } else { -1.0 };
+                eval_collector.pst_mid[p] += 100.0 * d_mid * c;
+                eval_collector.pst_end[p] += 100.0 * d_end * c;
                 // println!("  {piece:?} {square}");
             }
         }
@@ -59,7 +60,7 @@ fn main() {
             for square in ALL_SQUARES {
                 let p = (Color::White, piece, square);
                 eval_f64.pst_mid[p] -= ALPHA * eval_collector.pst_mid[p] * MEAN;
-                // eval_f64.pst_end[p] -= ALPHA * eval_collector.pst_end[p] * MEAN;
+                eval_f64.pst_end[p] -= ALPHA * eval_collector.pst_end[p] * MEAN;
             }
         }
         // eval_f64.rook_open_file_bonus -= ALPHA * eval_collector.rook_open_file_bonus * MEAN;
@@ -67,6 +68,10 @@ fn main() {
         // eval_f64.king_open_file_penalty -= ALPHA * eval_collector.king_open_file_penalty * MEAN;
 
         eval_params = eval_f64.round_into_i16();
+
+        if iteration % 1000 == 0 {
+            std::fs::write("../src/eval_params.bin", postcard::to_stdvec(&eval_params).unwrap()).unwrap();
+        }
     }
 }
 
