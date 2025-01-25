@@ -146,13 +146,13 @@ impl Default for EvalParams {
         include_optional::include_bytes_optional!("eval_params.bin").map_or_else(|| {
             Self {
                 pst_mid: Pst(core::array::from_fn(|i| {
-                    params::PIECE_SQUARE_TABLE_MID[i] + params::PIECE_VALUE_MID[i / 64]
+                    params::PIECE_VALUE_MID[i / 64] + params::PIECE_SQUARE_TABLE_MID[i]
                 })),
                 pst_end: Pst(core::array::from_fn(|i| {
-                    params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]
+                    params::PIECE_VALUE_END[i / 64] + params::PIECE_SQUARE_TABLE_END[i]
                 })),
-                rook_open_file_bonus: 20,
-                king_pawn_penalty: -15,
+                rook_open_file_bonus: 0,
+                king_pawn_penalty: 0,
                 king_open_file_penalty: 0,
             }
         }, |b| postcard::from_bytes(b).unwrap())

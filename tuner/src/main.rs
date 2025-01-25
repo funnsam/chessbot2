@@ -3,12 +3,15 @@ use std::{io::BufRead, str::FromStr};
 use chess::{BitBoard, Board, Color, Piece, ALL_PIECES, ALL_SQUARES};
 use chessbot2::eval::{is_open_file, is_semi_open_file, EvalParamList, EvalParams, MAX_PHASE};
 
-const ALPHA: f64 = 0.01;
-const BATCH: usize = 50_000;
+const ALPHA_PST: f64 = 0.05;
+const ALPHA: f64 = 0.25;
 
 fn main() {
     let mut eval_f64 = EvalParamList::<f64>::default();
     let mut eval_params = eval_f64.round_into_i16();
+
+    let mut best_eval_params = eval_f64.round_into_i16();
+    let mut best_cost = f64::INFINITY;
 
     let lines = std::io::stdin().lock().lines();
     let pos = lines.filter_map(|l| {
@@ -26,13 +29,12 @@ fn main() {
     let k = find_k(&eval_params, &pos);
     println!("K = {k}");
 
-    for iteration in 0..150 {
+    for iteration in 0..200 {
         let mut eval_collector = EvalParamList::zeroed();
         let mut eval_frequency = EvalParamList::zeroed();
 
-        for _ in 0..BATCH {
-            let (board, r) = &train[fastrand::usize(..train.len())];
-            let (mg, eg, w) = eval_params.get_separated_in_white(board);
+        for (board, r) in train.iter() {
+            let (mg, eg, w) = eval_params.get_separated_in_white(&board);
             let eval = eval_params.evaluate_with((mg, eg, w)).0 as f64 / 100.0;
 
             let s = sigmoid(eval, k);
@@ -55,7 +57,7 @@ fn main() {
                 eval_frequency.pst_end[p] += 1.0 - w;
 
                 // rook has open file
-                if piece == Piece::Rook && is_open_file(board, square.get_file()) {
+                if piece == Piece::Rook && is_open_file(&board, square.get_file()) {
                     eval_collector.rook_open_file_bonus += 100.0 * d_eval * c;
                     eval_frequency.rook_open_file_bonus += 1.0;
                 }
@@ -63,10 +65,10 @@ fn main() {
                 if piece == Piece::King {
                     let mut open_files = 0;
                     if let Some(sq) = square.left() {
-                        open_files += is_semi_open_file(board, color, sq.get_file()) as i16;
+                        open_files += is_semi_open_file(&board, color, sq.get_file()) as i16;
                     }
                     if let Some(sq) = square.right() {
-                        open_files += is_semi_open_file(board, color, sq.get_file()) as i16;
+                        open_files += is_semi_open_file(&board, color, sq.get_file()) as i16;
                     }
                     eval_collector.king_open_file_penalty += 100.0 * d_mid * open_files as f64 * c;
                     eval_frequency.king_open_file_penalty += open_files.min(1) as f64 * w;
@@ -82,8 +84,8 @@ fn main() {
         for piece in ALL_PIECES {
             for square in ALL_SQUARES {
                 let p = (Color::White, piece, square);
-                eval_f64.pst_mid[p] -= ALPHA * eval_collector.pst_mid[p] / eval_frequency.pst_mid[p].max(1.0);
-                eval_f64.pst_end[p] -= ALPHA * eval_collector.pst_end[p] / eval_frequency.pst_end[p].max(1.0);
+                eval_f64.pst_mid[p] -= ALPHA_PST * eval_collector.pst_mid[p] / eval_frequency.pst_mid[p].max(1.0);
+                eval_f64.pst_end[p] -= ALPHA_PST * eval_collector.pst_end[p] / eval_frequency.pst_end[p].max(1.0);
             }
         }
 
@@ -98,12 +100,17 @@ fn main() {
             let eval = eval_params.evaluate_with(eval_params.get_separated_in_white(board));
             let s = sigmoid(eval.0 as f64 / 100.0, k);
             let err = *r - s;
-            cost += err * err / 500.0;
+            cost += err * err / test.len() as f64;
         }
         println!("{iteration} {cost}");
+
+        if cost < best_cost {
+            best_eval_params = eval_params.clone();
+            best_cost = cost;
+        }
     }
 
-    std::fs::write("../src/eval_params.bin", postcard::to_stdvec(&eval_params).unwrap()).unwrap();
+    std::fs::write("../src/eval_params.bin", postcard::to_stdvec(&best_eval_params).unwrap()).unwrap();
 }
 
 fn sigmoid(x: f64, k: f64) -> f64 {
