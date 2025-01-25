@@ -89,7 +89,10 @@ impl State {
             ),
             Some(uci::UciCommand::Bench) => self.benchmark(),
             Some(uci::UciCommand::Selfplay) => self.engine.self_play_gen_fen_csv(),
-            None => {},
+            Some(uci::UciCommand::Dump("pst-mid")) => println!("{}", self.engine.eval_params.pst_mid),
+            Some(uci::UciCommand::Dump("pst-end")) => println!("{}", self.engine.eval_params.pst_end),
+            Some(uci::UciCommand::Dump("eval")) => println!("{:?}", self.engine.eval_params),
+            Some(uci::UciCommand::Dump(_)) | None => {},
         }
     }
 

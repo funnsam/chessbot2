@@ -1,11 +1,10 @@
 use std::{io::BufRead, str::FromStr};
 
 use chess::{BitBoard, Board, Color, Piece, ALL_PIECES, ALL_SQUARES};
-use chessbot2::eval::{is_open_file, is_semi_open_file, EvalParamList, MAX_PHASE};
+use chessbot2::eval::{is_open_file, is_semi_open_file, EvalParamList, EvalParams, MAX_PHASE};
 
 const ALPHA: f64 = 0.01;
-const K: f64 = 0.4;
-const BATCH: usize = 50000;
+const BATCH: usize = 50_000;
 
 fn main() {
     let mut eval_f64 = EvalParamList::<f64>::default();
@@ -24,7 +23,10 @@ fn main() {
 
     println!("{} positions loaded", pos.len());
 
-    for iteration in 0..500 {
+    let k = find_k(&eval_params, &pos);
+    println!("K = {k}");
+
+    for iteration in 0..300 {
         let mut eval_collector = EvalParamList::zeroed();
         let mut eval_frequency = EvalParamList::zeroed();
 
@@ -33,8 +35,8 @@ fn main() {
             let (mg, eg, w) = eval_params.get_separated_in_white(board);
             let eval = eval_params.evaluate_with((mg, eg, w)).0 as f64 / 100.0;
 
-            let s = sigmoid(eval);
-            let d_eval = (2.0 * (s - *r)) * (K * s * (1.0 - s));
+            let s = sigmoid(eval, k);
+            let d_eval = (2.0 * (s - *r)) * (k * s * (1.0 - s));
 
             let d_mid = d_eval * (w as f64 / MAX_PHASE as f64);
             let d_end = d_eval * (1.0 - w as f64 / MAX_PHASE as f64);
@@ -77,18 +79,11 @@ fn main() {
         }
 
         for piece in ALL_PIECES {
-            let (mut mg, mut eg) = (0.0, 0.0);
-
             for square in ALL_SQUARES {
                 let p = (Color::White, piece, square);
                 eval_f64.pst_mid[p] -= ALPHA * eval_collector.pst_mid[p] / eval_frequency.pst_mid[p].max(1.0);
                 eval_f64.pst_end[p] -= ALPHA * eval_collector.pst_end[p] / eval_frequency.pst_end[p].max(1.0);
-
-                mg += eval_f64.pst_mid[p];
-                eg += eval_f64.pst_end[p];
             }
-
-            println!("{piece:?}: {:.02} {:.02}", mg / 64.0, eg / 64.0);
         }
 
         eval_f64.rook_open_file_bonus   -= ALPHA * eval_collector.rook_open_file_bonus   / eval_frequency.rook_open_file_bonus.max(1.0);
@@ -100,7 +95,7 @@ fn main() {
         let mut cost = 0.0;
         for (board, r) in test.iter() {
             let eval = eval_params.evaluate_with(eval_params.get_separated_in_white(board));
-            let s = sigmoid(eval.0 as f64 / 100.0);
+            let s = sigmoid(eval.0 as f64 / 100.0, k);
             let err = *r - s;
             cost += err * err / 500.0;
         }
@@ -110,6 +105,30 @@ fn main() {
     std::fs::write("../src/eval_params.bin", postcard::to_stdvec(&eval_params).unwrap()).unwrap();
 }
 
-fn sigmoid(x: f64) -> f64 {
-    1.0 / (1.0 + (-K * x).exp())
+fn sigmoid(x: f64, k: f64) -> f64 {
+    1.0 / (1.0 + (-k * x).exp())
+}
+
+fn find_k(ep: &EvalParams, pos: &[(Board, f64)]) -> f64 {
+    let mut best_k = 0.0;
+    let mut best_cost = f64::INFINITY;
+
+    for k in 1..=2000 {
+        let k = k as f64 / 1000.0;
+        let mut cost = 0.0;
+
+        for (board, r) in pos[..5000].iter() {
+            let eval = ep.evaluate_with(ep.get_separated_in_white(board));
+            let s = sigmoid(eval.0 as f64 / 100.0, k);
+            let err = *r - s;
+            cost += err * err / pos.len() as f64;
+        }
+
+        if cost < best_cost {
+            best_k = k;
+            best_cost = cost;
+        }
+    }
+
+    best_k
 }

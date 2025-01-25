@@ -1,3 +1,5 @@
+use core::fmt;
+
 use chess::*;
 
 /// Evaluation score in centipawns. +ve is side to move better and -ve is worse
@@ -149,9 +151,9 @@ impl Default for EvalParams {
                 pst_end: Pst(core::array::from_fn(|i| {
                     params::PIECE_SQUARE_TABLE_END[i] + params::PIECE_VALUE_END[i / 64]
                 })),
-                rook_open_file_bonus: 20,
-                king_pawn_penalty: -15,
-                king_open_file_penalty: 0,
+                rook_open_file_bonus: 15,
+                king_pawn_penalty: -5,
+                king_open_file_penalty: -1,
             }
         }, |b| postcard::from_bytes(b).unwrap())
     }
@@ -226,6 +228,40 @@ impl<T> core::ops::IndexMut<(Color, Piece, Square)> for Pst<T> where
 {
     fn index_mut(&mut self, index: (Color, Piece, Square)) -> &mut Self::Output {
         &mut self.0[Self::index_of(index)]
+    }
+}
+
+impl fmt::Display for Pst<i16> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for piece in ALL_PIECES {
+            let width = self.0[piece.to_index() * 64..].iter().take(64)
+                .map(|i| (i.abs() + 1).ilog10() + 1 + i.is_negative() as u32)
+                .max().unwrap() as usize;
+            let min = self.0[piece.to_index() * 64..].iter().take(64).min().unwrap();
+            let max = self.0[piece.to_index() * 64..].iter().take(64).max().unwrap();
+            let mean = self.0[piece.to_index() * 64..].iter().take(64)
+                .map(|i| *i as f64)
+                .sum::<f64>() / 64.0;
+
+            writeln!(f, "{piece:?} (average: {mean:.1})")?;
+
+            for rank in ALL_RANKS.into_iter().rev() {
+                write!(f, "  ")?;
+
+                for file in ALL_FILES {
+                    let value = self[(Color::White, piece, Square::make_square(rank, file))];
+                    let bg = 23.0 * (value - min) as f32 / (max - min) as f32;
+                    let fg = if bg < 11.5 { 97 } else { 30 };
+                    let bg = bg.round() as usize + 232;
+
+                    write!(f, "\x1b[{fg};48;5;{bg}m {value:^width$} ")?;
+                }
+
+                writeln!(f, "\x1b[0m")?;
+            }
+        }
+
+        Ok(())
     }
 }
 
