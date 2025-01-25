@@ -17,7 +17,10 @@ while True:
     else:
         r = "0.5"
 
+    board = game.board()
     for node in game.mainline():
         c = node.comment[0]
-        if "M" not in c:
+
+        if "M" not in c and not board.is_capture(node.move):
             print(f'{node.board().fen()},,{r}')
+        board = node.board()
