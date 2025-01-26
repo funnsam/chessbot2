@@ -4,7 +4,7 @@ use core::str::FromStr;
 use std::sync::{atomic::*, Arc};
 use api::{move_from_uci, Challenge, Direction, Event, GameEvent, GameState, LichessApi, Player, Speed, Variant};
 use chess::{Board, Color};
-use chessbot2::Game;
+use dysprosium::Game;
 
 mod api;
 mod log;
@@ -41,7 +41,7 @@ impl LichessClient {
                 }
             },
             Event::GameStart { game: api::Game { id, color, fen, opponent, .. } } => {
-                let game = chessbot2::Game::from_str(fen).unwrap();
+                let game = dysprosium::Game::from_str(fen).unwrap();
 
                 info!("started a game with `{}` (id: `{id}`, fen: `{fen}`)", opponent.username.unwrap());
 
@@ -57,8 +57,8 @@ impl LichessClient {
         });
     }
 
-    fn play_game(self: Arc<Self>, game_id: String, game: chessbot2::Game, color: Color) {
-        let mut engine = chessbot2::Engine::new(game, 64 * 1024 * 1024);
+    fn play_game(self: Arc<Self>, game_id: String, game: dysprosium::Game, color: Color) {
+        let mut engine = dysprosium::Engine::new(game, 64 * 1024 * 1024);
 
         self.api.listen_game(&game_id, |event| match event {
             GameEvent::GameFull { initial_fen, state } => {
@@ -86,13 +86,13 @@ impl LichessClient {
         info!("stream ended (id: `{}`)", game_id);
     }
 
-    fn play(&self, game_id: &str, color: Color, state: GameState<'_>, engine: &mut chessbot2::Engine) {
+    fn play(&self, game_id: &str, color: Color, state: GameState<'_>, engine: &mut dysprosium::Engine) {
         engine.time_control(None, match color {
-            Color::White => chessbot2::TimeControl {
+            Color::White => dysprosium::TimeControl {
                 time_left: state.wtime,
                 time_incr: state.winc,
             },
-            Color::Black => chessbot2::TimeControl {
+            Color::Black => dysprosium::TimeControl {
                 time_left: state.btime,
                 time_incr: state.binc,
             },

@@ -1,7 +1,4 @@
-# Chessbot2
-> [!NOTE]
-> This engine is currently renaming! Contact me if you have any good naming suggestion.
-
+# Dysprosium
 ## Versioning system
 ```
 2.23.2 ← patch

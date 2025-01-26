@@ -1,7 +1,7 @@
 use core::str::FromStr;
 use std::time::Duration;
 use chess::*;
-use chessbot2::TimeControl;
+use dysprosium::TimeControl;
 
 pub enum UciCommand<'a> {
     Uci,
@@ -9,7 +9,7 @@ pub enum UciCommand<'a> {
     IsReady,
     UciNewGame,
     Position {
-        position: chessbot2::Game,
+        position: dysprosium::Game,
         moves: Vec<ChessMove>,
     },
     Go {
@@ -66,10 +66,10 @@ pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<Uc
                     fen += " ";
                 }
 
-                chessbot2::Game::from_str(fen.trim()).ok()?
+                dysprosium::Game::from_str(fen.trim()).ok()?
             } else if matches!(next, Some("startpos")) {
                 token.next();
-                chessbot2::Game::default()
+                dysprosium::Game::default()
             } else {
                 return None;
             };

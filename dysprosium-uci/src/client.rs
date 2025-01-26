@@ -1,9 +1,9 @@
 use crate::*;
 
-use chessbot2::Engine;
+use dysprosium::Engine;
 
 fn print_uci_info() {
-    println!("id name chessbot2 v{VERSION}");
+    println!("id name dysprosium v{VERSION}");
     println!("id author funnsam");
     println!(
         "option name Hash type spin default {DEFAULT_HASH_SIZE_MB} min 1 max {}",

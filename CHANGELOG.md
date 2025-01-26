@@ -1,6 +1,6 @@
 <!-- updated by cargo-release -->
 
-# Unreleased
+# 0.1.0
 - Search:
     - Iterative deepening
     - Root aspiration window

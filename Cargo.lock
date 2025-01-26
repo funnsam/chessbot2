@@ -82,37 +82,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chessbot2"
-version = "0.1.0"
-dependencies = [
- "arrayvec",
- "bytemuck",
- "chess",
- "fastrand",
- "fxhash",
- "parking_lot",
-]
-
-[[package]]
-name = "chessbot2-lichess"
-version = "0.1.0"
-dependencies = [
- "chess",
- "chessbot2",
- "serde",
- "serde_json",
- "ureq",
-]
-
-[[package]]
-name = "chessbot2-uci"
-version = "0.1.0"
-dependencies = [
- "chess",
- "chessbot2",
-]
-
-[[package]]
 name = "const_for"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -125,6 +94,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "dysprosium"
+version = "0.1.0"
+dependencies = [
+ "arrayvec",
+ "bytemuck",
+ "chess",
+ "fastrand",
+ "fxhash",
+ "parking_lot",
+]
+
+[[package]]
+name = "dysprosium-lichess"
+version = "0.1.0"
+dependencies = [
+ "chess",
+ "dysprosium",
+ "serde",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
+name = "dysprosium-uci"
+version = "0.1.0"
+dependencies = [
+ "chess",
+ "dysprosium",
 ]
 
 [[package]]

@@ -1,8 +1,8 @@
 [workspace]
-members = ["chessbot2-lichess","chessbot2-uci"]
+members = ["dysprosium-lichess","dysprosium-uci"]
 
 [package]
-name = "chessbot2"
+name = "dysprosium"
 version = "0.1.0"
 edition = "2024"
 

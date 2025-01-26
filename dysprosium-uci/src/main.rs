@@ -1,7 +1,7 @@
 #![feature(str_split_whitespace_remainder)]
 
 use std::{io::BufRead, str::FromStr};
-use chessbot2::*;
+use dysprosium::*;
 
 mod client;
 mod uci;
@@ -11,7 +11,7 @@ const DEFAULT_THREADS: usize = 1;
 const MB: usize = 1024 * 1024;
 
 fn main() {
-    println!("chessbot2 v{VERSION} licensed under GPLv3");
+    println!("Dysprosium v{VERSION} licensed under GPLv3");
 
     let mut client = client::State::new();
 
