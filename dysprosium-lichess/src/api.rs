@@ -5,7 +5,7 @@ use chess::{ChessMove, Color, Piece, Square};
 use serde::Deserialize;
 use serde_json::from_str;
 use ureq::{Request, Response};
-use crate::{dbg, error, info, warn};
+use crate::{error, info, warn};
 
 pub struct LichessApi {
     api_token: String,
@@ -216,23 +216,11 @@ impl<R: Read> JsonStreamIter<R> {
     }
 
     fn next_json<'a, T: Deserialize<'a>>(&'a mut self) -> Option<Result<Result<serde_json::Result<T>, std::str::Utf8Error>, std::io::Error>> {
-        self.buffer.clear();
-
         let mut buf = [0];
-        let mut level = 0;
+        self.buffer.clear();
 
         loop {
             match self.stream.read(&mut buf) {
-                // Ok(b) if b == 1 => {
-                //     match buf[0] {
-                //         b'\n' => continue,
-                //         b'{' => level += 1,
-                //         b'}' if level == 1 => { self.buffer.push(b'}'); break },
-                //         b'}' => level -= 1,
-                //         _ => {},
-                //     }
-                //     self.buffer.push(buf[0]);
-                // },
                 Ok(b) if b == 1 => match buf[0] {
                     b'\n' if self.buffer.is_empty() => continue,
                     b'\n' => break,
@@ -244,7 +232,7 @@ impl<R: Read> JsonStreamIter<R> {
         }
 
         match std::str::from_utf8(&self.buffer) {
-            Ok(s) => { dbg!("{s}"); Some(Ok(Ok(from_str(s)))) },
+            Ok(s) => Some(Ok(Ok(from_str(s)))),
             Err(err) => Some(Ok(Err(err))),
         }
     }

@@ -13,6 +13,8 @@ const DISALLOWED_TIME_CONTROLS: &[Speed] = &[Speed::Correspondence, Speed::Class
 const EXCEPTION_USERS: &[&str] = &["funnsam"];
 const ACCEPT_RATED: bool = false;
 
+const THREADS_PER_GAME: usize = 2;
+
 pub struct LichessClient {
     api: LichessApi,
     pub active_games: AtomicUsize,
@@ -23,7 +25,7 @@ impl LichessClient {
         Self { api, active_games: AtomicUsize::new(0) }
     }
 
-    pub async fn listen(self: Arc<Self>) {
+    pub fn listen(self: Arc<Self>) {
         self.api.listen(|event| match event {
             Event::Challenge { challenge: Challenge { direction, id, challenger: Player { name: Some(challenger), .. }, variant: Variant { key: variant }, speed, rated } } => {
                 if direction == Some(Direction::Out) { return };
@@ -42,6 +44,7 @@ impl LichessClient {
             },
             Event::GameStart { game: api::Game { id, color, fen, opponent, .. } } => {
                 let game = dysprosium::Game::from_str(fen).unwrap();
+                self.active_games.fetch_add(1, Ordering::Relaxed);
 
                 info!("started a game with `{}` (id: `{id}`, fen: `{fen}`)", opponent.username.unwrap());
 
@@ -49,9 +52,8 @@ impl LichessClient {
                 let id = id.to_string();
                 std::thread::spawn(move || arc.play_game(id, game, color.0));
             },
-            Event::GameFinish { game } => {
+            Event::GameFinish { .. } => {
                 self.active_games.fetch_sub(1, Ordering::Relaxed);
-                dbg!("{game:?}");
             },
             _ => dbg!("{event:?}"),
         });
@@ -59,24 +61,29 @@ impl LichessClient {
 
     fn play_game(self: Arc<Self>, game_id: String, game: dysprosium::Game, color: Color) {
         let mut engine = dysprosium::Engine::new(game, 64 * 1024 * 1024);
+        engine.start_smp(THREADS_PER_GAME - 1);
 
         self.api.listen_game(&game_id, |event| match event {
             GameEvent::GameFull { initial_fen, state } => {
-                engine.game = Game::new(Board::from_str(initial_fen).unwrap_or_default());
+                let mut game = engine.game.write();
+                *game = Game::new(Board::from_str(initial_fen).unwrap_or_default());
                 for m in state.moves.split_whitespace() {
-                    engine.game = engine.game.make_move(move_from_uci(m));
+                    *game = game.make_move(move_from_uci(m));
                 }
 
-                if engine.game.board().side_to_move() == color {
+                if game.board().side_to_move() == color {
+                    drop(game);
                     self.play(&game_id, color, state, &mut engine);
                 }
             },
             GameEvent::GameState { state } => {
+                let mut game = engine.game.write();
                 if let Some(m) = state.moves.split_whitespace().last() {
-                    engine.game = engine.game.make_move(move_from_uci(m));
+                    *game = game.make_move(move_from_uci(m));
                 }
 
-                if engine.game.board().side_to_move() == color {
+                if game.board().side_to_move() == color {
+                    drop(game);
                     self.play(&game_id, color, state, &mut engine);
                 }
             },
@@ -118,5 +125,5 @@ impl LichessClient {
 
 fn main() {
     let api_key = std::fs::read_to_string("api_key.txt").unwrap().trim().to_string();
-    swait::swait(Arc::new(LichessClient::new(LichessApi::new(api_key))).listen());
+    Arc::new(LichessClient::new(LichessApi::new(api_key))).listen();
 }
