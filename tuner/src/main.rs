@@ -84,14 +84,14 @@ fn main() {
         for piece in ALL_PIECES {
             for square in ALL_SQUARES {
                 let p = (Color::White, piece, square);
-                eval_f64.pst_mid[p] -= ALPHA_PST * eval_collector.pst_mid[p] / eval_frequency.pst_mid[p].max(1.0);
-                eval_f64.pst_end[p] -= ALPHA_PST * eval_collector.pst_end[p] / eval_frequency.pst_end[p].max(1.0);
+                eval_f64.pst_mid[p] -= ALPHA_PST * eval_collector.pst_mid[p] / eval_frequency.pst_mid[p].max(0.01);
+                eval_f64.pst_end[p] -= ALPHA_PST * eval_collector.pst_end[p] / eval_frequency.pst_end[p].max(0.01);
             }
         }
 
-        eval_f64.rook_open_file_bonus   -= ALPHA * eval_collector.rook_open_file_bonus   / eval_frequency.rook_open_file_bonus.max(1.0);
-        eval_f64.king_pawn_penalty      -= ALPHA * eval_collector.king_pawn_penalty      / eval_frequency.king_pawn_penalty.max(1.0);
-        eval_f64.king_open_file_penalty -= ALPHA * eval_collector.king_open_file_penalty / eval_frequency.king_open_file_penalty.max(1.0);
+        eval_f64.rook_open_file_bonus   -= ALPHA * eval_collector.rook_open_file_bonus   / eval_frequency.rook_open_file_bonus.max(0.01);
+        eval_f64.king_pawn_penalty      -= ALPHA * eval_collector.king_pawn_penalty      / eval_frequency.king_pawn_penalty.max(0.01);
+        eval_f64.king_open_file_penalty -= ALPHA * eval_collector.king_open_file_penalty / eval_frequency.king_open_file_penalty.max(0.01);
 
         eval_params = eval_f64.round_into_i16();
 
@@ -104,7 +104,7 @@ fn main() {
         }
         println!("{iteration} {cost}");
 
-        if cost < best_cost {
+        if cost <= best_cost {
             best_eval_params = eval_params.clone();
             best_cost = cost;
         }
