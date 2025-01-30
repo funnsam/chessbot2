@@ -1,8 +1,9 @@
 use core::cmp::*;
-use crate::{trans_table::TransTableEntry, Game};
 use core::cell::UnsafeCell;
+
+use crate::{trans_table::TransTableEntry, Game};
 use crate::eval::PIECE_VALUE;
-use chess::ChessMove;
+use dychess::prelude::*;
 
 pub struct ButterflyTable<T>(UnsafeCell<[T; 64 * 64]>);
 
@@ -26,33 +27,33 @@ impl<T: Default> ButterflyTable<T> {
 }
 
 impl<T> ButterflyTable<T> {
-    pub fn get_mut(&self, m: ChessMove) -> &mut T {
+    pub fn get_mut(&self, m: Move) -> &mut T {
         unsafe {
-            &mut (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
+            &mut (*self.0.get())[m.from().to_usize() * 64 + m.to().to_usize()]
         }
     }
 }
 
-impl<T> core::ops::Index<ChessMove> for ButterflyTable<T> {
+impl<T> core::ops::Index<Move> for ButterflyTable<T> {
     type Output = T;
 
-    fn index(&self, m: ChessMove) -> &Self::Output {
+    fn index(&self, m: Move) -> &Self::Output {
         unsafe {
-            &(*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
+            &(*self.0.get())[m.from().to_usize() * 64 + m.to().to_usize()]
         }
     }
 }
 
-impl<T> core::ops::IndexMut<ChessMove> for ButterflyTable<T> {
-    fn index_mut(&mut self, m: ChessMove) -> &mut Self::Output {
+impl<T> core::ops::IndexMut<Move> for ButterflyTable<T> {
+    fn index_mut(&mut self, m: Move) -> &mut Self::Output {
         unsafe {
-            &mut (*self.0.get())[m.get_source().to_index() * 64 + m.get_dest().to_index()]
+            &mut (*self.0.get())[m.from().to_usize() * 64 + m.to().to_usize()]
         }
     }
 }
 
 impl ButterflyTable<isize> {
-    pub fn update(&self, m: ChessMove, bonus: isize) {
+    pub fn update(&self, m: Move, bonus: isize) {
         const MAX: isize = 32760;
         let bonus = bonus.min(MAX).max(-MAX);
         *self.get_mut(m) += bonus - self[m] * bonus.abs() / MAX;
@@ -61,18 +62,18 @@ impl ButterflyTable<isize> {
 
 pub type HistoryTable = ButterflyTable<isize>;
 pub type KillerTable = ButterflyTable<isize>;
-pub type CountermoveTable = ButterflyTable<ChessMove>;
+pub type CountermoveTable = ButterflyTable<Move>;
 
 impl<const MAIN: bool> crate::SmpThread<'_, MAIN> {
     pub(crate) fn move_score(
         &self,
-        m: ChessMove,
-        prev_move: ChessMove,
+        m: Move,
+        prev_move: Move,
         game: &Game,
         tte: &Option<TransTableEntry>,
         killer: &KillerTable,
     ) -> i32 {
-        if tte.is_some_and(|tte| tte.next == m) {
+        if tte.is_some_and(|tte| { let next = tte.next; next == m }) {
             i32::MAX
         } else if game.is_capture(m) {
             mvv_lva(game, m) as i32 * 327601
@@ -86,7 +87,7 @@ impl<const MAIN: bool> crate::SmpThread<'_, MAIN> {
     }
 }
 
-fn mvv_lva(game: &Game, m: ChessMove) -> i16 {
+fn mvv_lva(game: &Game, m: Move) -> i16 {
     const P: i16 = PIECE_VALUE[0];
     const N: i16 = PIECE_VALUE[1];
     const B: i16 = PIECE_VALUE[2];
@@ -104,8 +105,8 @@ fn mvv_lva(game: &Game, m: ChessMove) -> i16 {
         [P - K, N - K, B - K, R - K, Q - K, 0], // K
     ];
 
-    let victim = game.board().piece_on(m.get_dest()).map_or(5, |p| p.to_index());
-    let aggressor = game.board().piece_on(m.get_source()).unwrap().to_index();
+    let victim = game.board().piece_on(m.to()).map_or(5, |p| p as usize);
+    let aggressor = game.board().piece_on(m.from()).unwrap() as usize;
 
     MVV_LVA[victim][aggressor]
 }

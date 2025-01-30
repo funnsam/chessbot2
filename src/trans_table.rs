@@ -7,7 +7,7 @@ pub type TransTable = SharedHashTable<TransTableEntry>;
 pub struct TransTableEntry {
     pub depth: u8,
     pub eval: Eval,
-    pub next: chess::ChessMove,
+    pub next: dychess::chess_move::Move,
     /// 2-bit node type
     pub flags: u8,
 }

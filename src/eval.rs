@@ -1,4 +1,4 @@
-use chess::*;
+use dychess::prelude::*;
 
 /// Evaluation score in centipawns. +ve is side to move better and -ve is worse
 /// ```text
@@ -139,7 +139,7 @@ pub fn evaluate_static(board: &Board) -> Eval {
 
         // rook on open file bonus
         let rook_on_open_file = (piece == Piece::Rook
-            && (board.pieces(Piece::Pawn) & chess::get_file(square.get_file())).0 == 0
+            && (board.pawns() & Bitboard::from(square.file())).0 == 0
         ) as i16 * 20;
         let pawn_shield = if piece == Piece::King {
             // TODO: open file penalty fails SPRT
@@ -152,16 +152,16 @@ pub fn evaluate_static(board: &Board) -> Eval {
             //     open_files += ((board.pieces(Piece::Pawn) & board.color_combined(color) & chess::get_file(sq.get_file())).0 == 0) as i16;
             // }
 
-            let king_center = square.uforward(color);
-            let king_pawns = (board.pieces(Piece::Pawn) & (chess::get_king_moves(king_center) | BitBoard::from_square(king_center))).popcnt();
+            let king_center = square.forward(color);
+            let king_pawns = (board.pawns() & (king::moves(king_center) | Bitboard::from(king_center))).popcnt();
 
             -(3_i16.saturating_sub(king_pawns as i16) * 15) // + open_files * 50)
         } else { 0 };
 
-        let idx = (square.to_index() ^ (0b111_000 * (color == Color::Black) as usize)) | (piece.to_index() << 6);
-        mid_game[color.to_index()] += rook_on_open_file + pawn_shield + PIECE_SQUARE_TABLE_MID[idx] + PIECE_VALUE_MID[piece.to_index()];
-        end_game[color.to_index()] += rook_on_open_file + PIECE_SQUARE_TABLE_END[idx] + PIECE_VALUE_END[piece.to_index()];
-        phase += PIECE_PHASE[piece.to_index()];
+        let idx = (square.to_usize() ^ (0b111_000 * (color == Color::Black) as usize)) | ((piece as usize) << 6);
+        mid_game[color as usize] += rook_on_open_file + pawn_shield + PIECE_SQUARE_TABLE_MID[idx] + PIECE_VALUE_MID[piece as usize];
+        end_game[color as usize] += rook_on_open_file + PIECE_SQUARE_TABLE_END[idx] + PIECE_VALUE_END[piece as usize];
+        phase += PIECE_PHASE[piece as usize];
     }
 
     let stm = board.side_to_move() as usize;
@@ -175,7 +175,7 @@ pub fn evaluate_static(board: &Board) -> Eval {
 
 /// Finds the current phase of the game. 0 is endgame and 24 is midgame.
 pub fn game_phase(board: &Board) -> u8 {
-    board.combined().into_iter().map(|sq| PIECE_PHASE[unsafe { board.piece_on(sq).unwrap_unchecked() }.to_index()]).sum::<u8>().min(24)
+    board.combined().into_iter().map(|sq| PIECE_PHASE[unsafe { board.piece_on(sq).unwrap_unchecked() } as usize]).sum::<u8>().min(24)
 }
 
 pub const PIECE_VALUE: [i16; 6] = [

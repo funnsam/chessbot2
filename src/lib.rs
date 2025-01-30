@@ -1,3 +1,4 @@
+use dychess::prelude::Move;
 pub use eval::{Eval, evaluate_static};
 pub use game::Game;
 pub use see::see;
@@ -142,15 +143,13 @@ impl Engine {
         self.can_time_out.load(Ordering::Relaxed) && self.elapsed() > self.hard_time_bound
     }
 
-    pub fn find_pv(&self, best: chess::ChessMove, max: usize) -> Vec<chess::ChessMove> {
-        use chess::*;
-
+    pub fn find_pv(&self, best: Move, max: usize) -> Vec<Move> {
         let mut pv = Vec::with_capacity(max);
         pv.push(best);
 
         let mut game = self.game.read().make_move(best);
         while let Some(tte) = self.trans_table.get(game.board().get_hash()) {
-            if tte.next == ChessMove::default() { break }
+            if tte.next == Move::default() { break }
 
             pv.push(tte.next);
             game = game.make_move(tte.next);

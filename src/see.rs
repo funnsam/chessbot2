@@ -1,34 +1,34 @@
 use crate::Game;
 use crate::eval::PIECE_VALUE;
-use chess::{BitBoard, ChessMove, Color, ALL_PIECES};
+use dychess::prelude::*;
 
-pub fn see(game: &Game, m: ChessMove) -> i16 {
-    fn smallest_attacker(attadef: BitBoard, stm: Color, game: &Game) -> BitBoard {
-        for pt in ALL_PIECES {
-            let subset = attadef & game.board().pieces(pt) & game.board().color_combined(stm);
+pub fn see(game: &Game, m: Move) -> i16 {
+    fn smallest_attacker(attadef: Bitboard, stm: Color, game: &Game) -> Bitboard {
+        for pt in Piece::ALL {
+            let subset = attadef & game.board().piece_combined(pt) & game.board().color_combined(stm);
             // game.visualize(subset);
 
             if subset.0 != 0 {
-                return subset & BitBoard::new(!subset.0 + 1);
+                return subset & Bitboard(!subset.0 + 1);
             }
         }
 
-        BitBoard::new(0)
+        Bitboard::default()
     }
 
-    if let Some(target) = game.board().piece_on(m.get_dest()) {
-        let attacker = unsafe { game.board().piece_on(m.get_source()).unwrap_unchecked() };
+    if let Some(target) = game.board().piece_on(m.to()) {
+        let attacker = unsafe { game.board().piece_on(m.from()).unwrap_unchecked() };
 
-        let mut from = BitBoard::from_square(m.get_source());
-        let mut combined = *game.board().combined();
+        let mut from = Bitboard::from(m.from());
+        let mut combined = game.board().combined();
         let mut stm = game.board().side_to_move();
-        let mut attadef = game.board().pseudo_attacks_to(m.get_dest(), combined, combined);
+        let mut attadef = game.board().pseudo_attacks_to(m.to(), combined, combined);
         let mut gain = [0; 32];
-        gain[0] = PIECE_VALUE[target.to_index()];
+        gain[0] = PIECE_VALUE[target as usize];
 
         let mut max_d = 0;
         for d in 1..32 {
-            gain[d] = PIECE_VALUE[attacker.to_index()] - gain[d - 1];
+            gain[d] = PIECE_VALUE[attacker as usize] - gain[d - 1];
 
             attadef ^= from;
             // game.visualize(attadef);
