@@ -158,7 +158,7 @@ pub fn evaluate_static(board: &Board) -> Eval {
             -(3_i16.saturating_sub(king_pawns as i16) * 15) // + open_files * 50)
         } else { 0 };
 
-        let idx = (square.to_usize() ^ (0b111_000 * (color == Color::Black) as usize)) | ((piece as usize) << 6);
+        let idx = square.pov(color).to_usize() | ((piece as usize) << 6);
         mid_game[color as usize] += rook_on_open_file + pawn_shield + PIECE_SQUARE_TABLE_MID[idx] + PIECE_VALUE_MID[piece as usize];
         end_game[color as usize] += rook_on_open_file + PIECE_SQUARE_TABLE_END[idx] + PIECE_VALUE_END[piece as usize];
         phase += PIECE_PHASE[piece as usize];

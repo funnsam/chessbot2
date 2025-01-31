@@ -174,7 +174,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
                     return (trans.next, eval, NodeType::None);
                 }
             }
-        }
+        } 
 
         if self.abort() {
             return (Move::default(), Eval(0), NodeType::None);
@@ -205,9 +205,8 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
             game.board().rooks().0 != 0 ||
             game.board().queens().0 != 0
         ) {
-            let r = if depth > 7 && game.board().our_pieces().popcnt() >= 2 { 5 } else { 4 };
-
             let un = game.make_null_move();
+            let r = if depth > 7 && game.board().our_pieces().popcnt() >= 2 { 5 } else { 4 };
             let eval = -self.zw_search::<Cut>(prev_move, game, &killer, depth - r, ply + 1, 1 - beta);
             game.unmake_null(un);
 
@@ -316,7 +315,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
         if children_searched != 0 {
             (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::All } else { NodeType::Pv })
         } else {
-            (Move::default(), if in_check { Eval::MIN } else { Eval(0) }, NodeType::None)
+            (best.0, if in_check { Eval::MIN } else { Eval(0) }, NodeType::None)
         }
     }
 
