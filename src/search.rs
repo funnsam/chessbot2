@@ -205,8 +205,9 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
             game.board().rooks().0 != 0 ||
             game.board().queens().0 != 0
         ) {
+            let r = if depth > 7 && game.board().our_pieces().popcnt() >= 2 { 5 } else { 4 };
+
             let un = game.make_null_move();
-            let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
             let eval = -self.zw_search::<Cut>(prev_move, game, &killer, depth - r, ply + 1, 1 - beta);
             game.unmake_null(un);
 
@@ -315,7 +316,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
         if children_searched != 0 {
             (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::All } else { NodeType::Pv })
         } else {
-            (Move::default(), if game.board().is_check() { Eval::MIN } else { Eval(0) }, NodeType::None)
+            (Move::default(), if in_check { Eval::MIN } else { Eval(0) }, NodeType::None)
         }
     }
 
@@ -330,6 +331,8 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
             if see(game, m) < 0 { continue };
 
             let game = game.make_move(m);
+            if game.board().is_illegal() { continue };
+
             let eval = -self.quiescence_search(&game, -beta, -alpha);
             self.nodes_searched += 1;
 
