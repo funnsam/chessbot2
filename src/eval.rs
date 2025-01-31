@@ -152,7 +152,7 @@ pub fn evaluate_static(board: &Board) -> Eval {
             //     open_files += ((board.pieces(Piece::Pawn) & board.color_combined(color) & chess::get_file(sq.get_file())).0 == 0) as i16;
             // }
 
-            let king_center = square.forward(color);
+            let king_center = square.forward_wrap(color, 1);
             let king_pawns = (board.pawns() & (king::moves(king_center) | Bitboard::from(king_center))).popcnt();
 
             -(3_i16.saturating_sub(king_pawns as i16) * 15) // + open_files * 50)

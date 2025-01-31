@@ -1,6 +1,6 @@
 use core::str::FromStr;
 use std::time::Duration;
-use chess::*;
+use dychess::prelude::*;
 use dysprosium::TimeControl;
 
 pub enum UciCommand<'a> {
@@ -10,7 +10,7 @@ pub enum UciCommand<'a> {
     UciNewGame,
     Position {
         position: dysprosium::Game,
-        moves: Vec<ChessMove>,
+        moves: Vec<Move>,
     },
     Go {
         depth: Option<usize>,
@@ -23,16 +23,16 @@ pub enum UciCommand<'a> {
     Quit,
     D,
     Eval,
-    Move(ChessMove),
+    Move(Move),
     Bench,
 }
 
-fn move_from_uci(m: &str) -> ChessMove {
+fn move_from_uci(m: &str) -> Move {
     let src = &m[0..2];
-    let src = Square::new(((src.as_bytes()[1] - b'1') << 3) + (src.as_bytes()[0] - b'a'));
+    let src = Square::from_index(((src.as_bytes()[1] - b'1') << 3) + (src.as_bytes()[0] - b'a'));
 
     let dst = &m[2..4];
-    let dst = Square::new(((dst.as_bytes()[1] - b'1') << 3) + (dst.as_bytes()[0] - b'a'));
+    let dst = Square::from_index(((dst.as_bytes()[1] - b'1') << 3) + (dst.as_bytes()[0] - b'a'));
 
     let piece = m.as_bytes().get(4).and_then(|p| match p {
         b'n' => Some(Piece::Knight),
@@ -42,7 +42,7 @@ fn move_from_uci(m: &str) -> ChessMove {
         _ => None,
     });
 
-    ChessMove::new(src, dst, piece)
+    Move::new(src, dst, piece)
 }
 
 pub fn parse_command<'a>(mut token: core::str::SplitWhitespace<'a>) -> Option<UciCommand<'a>> {

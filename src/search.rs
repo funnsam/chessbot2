@@ -176,13 +176,6 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
             }
         }
 
-        // TODO:
-        // match game.board().status() {
-        //     BoardStatus::Ongoing => {},
-        //     BoardStatus::Checkmate => return (ChessMove::default(), -Eval::M0, NodeType::None),
-        //     BoardStatus::Stalemate => return (ChessMove::default(), Eval(0), NodeType::None),
-        // }
-
         if self.abort() {
             return (Move::default(), Eval(0), NodeType::None);
         }
@@ -239,6 +232,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
         let _game = &game;
         for (i, (m, _)) in moves.iter().copied().enumerate() {
             let mut game = _game.make_move(m);
+            if game.board().is_illegal() { continue };
 
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
@@ -318,7 +312,11 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
             children_searched += 1;
         }
 
-        (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::All } else { NodeType::Pv })
+        if children_searched != 0 {
+            (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::All } else { NodeType::Pv })
+        } else {
+            (Move::default(), if game.board().is_check() { Eval::MIN } else { Eval(0) }, NodeType::None)
+        }
     }
 
     fn quiescence_search(&mut self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {

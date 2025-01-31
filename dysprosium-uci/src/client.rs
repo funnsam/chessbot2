@@ -1,5 +1,6 @@
 use crate::*;
 
+use dychess::prelude::*;
 use dysprosium::Engine;
 
 fn print_uci_info() {
@@ -22,7 +23,7 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
-        let mut engine = Engine::new(Game::new(chess::Board::default()), DEFAULT_HASH_SIZE_MB * MB);
+        let mut engine = Engine::new(Game::new(Board::default()), DEFAULT_HASH_SIZE_MB * MB);
         engine.start_smp(DEFAULT_THREADS - 1);
 
         Self {
@@ -60,7 +61,7 @@ impl State {
                 *self.engine.game.write() = self.engine.game.read().make_move(m)
             },
             Some(uci::UciCommand::Go { depth: target_depth, movetime, wtime, btime, movestogo }) => {
-                let tc = if matches!(self.engine.game.read().board().side_to_move(), chess::Color::White) {
+                let tc = if matches!(self.engine.game.read().board().side_to_move(), Color::White) {
                     wtime
                 } else {
                     btime
@@ -128,7 +129,7 @@ impl State {
         }
     }
 
-    fn best_move(&mut self, target_depth: Option<usize>) -> chess::ChessMove {
+    fn best_move(&mut self, target_depth: Option<usize>) -> Move {
         self.engine.best_move(|engine, (best, eval, depth)| {
             let time = engine.elapsed();
             let nodes = engine.nodes();
