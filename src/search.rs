@@ -81,8 +81,8 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
     ) -> (Move, Eval, NodeType) {
         self.nodes_searched = 0;
 
-        let game: Game = self.game.read().clone();
-        let (next, eval, nt) = self._evaluate_search::<Pv, true>(Move::default(), &game, &KillerTable::new(), depth, 0, alpha, beta, false);
+        let mut game: Game = self.game.read().clone();
+        let (next, eval, nt) = self._evaluate_search::<Pv, true>(Move::default(), &mut game, &KillerTable::new(), depth, 0, alpha, beta, false);
 
         self.store_tt(depth, &game, (next, eval, nt));
         self.total_nodes_searched.fetch_add(self.nodes_searched, Ordering::Relaxed);
@@ -102,7 +102,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
     fn zw_search<Node: node::Node>(
         &mut self,
         prev_move: Move,
-        game: &Game,
+        game: &mut Game,
         killer: &KillerTable,
         depth: usize,
         ply: usize,
@@ -116,7 +116,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
     fn evaluate_search<Node: node::Node>(
         &mut self,
         prev_move: Move,
-        game: &Game,
+        game: &mut Game,
         killer: &KillerTable,
         depth: usize,
         ply: usize,
@@ -151,7 +151,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
     fn _evaluate_search<Node: node::Node, const ROOT: bool>(
         &mut self,
         prev_move: Move,
-        game: &Game,
+        game: &mut Game,
         p_killer: &KillerTable,
         depth: usize,
         ply: usize,
@@ -214,7 +214,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
         ) {
             let un = game.make_null_move();
             let r = if depth > 7 && game.board().color_combined(game.board().side_to_move()).popcnt() >= 2 { 5 } else { 4 };
-            let eval = -self.zw_search::<Cut>(prev_move, &game, &killer, depth - r, ply + 1, 1 - beta);
+            let eval = -self.zw_search::<Cut>(prev_move, game, &killer, depth - r, ply + 1, 1 - beta);
             game.unmake_null(un);
 
             if eval >= beta {
@@ -238,7 +238,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
         let mut children_searched = 0;
         let _game = &game;
         for (i, (m, _)) in moves.iter().copied().enumerate() {
-            let game = _game.make_move(m);
+            let mut game = _game.make_move(m);
 
             // futility pruning: kill nodes with no potential
             if !in_check && depth <= 2 {
@@ -258,7 +258,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
 
             let mut eval = Eval(i16::MIN);
             let do_full_research = if can_reduce {
-                eval = -self.zw_search::<Node::Zw>(m, &game, &killer, depth / 2, ply + 1, -alpha);
+                eval = -self.zw_search::<Node::Zw>(m, &mut game, &killer, depth / 2, ply + 1, -alpha);
 
                 if alpha < eval && depth / 2 < depth - 1 {
                     self.debug.research.inc();
@@ -272,12 +272,12 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
             };
 
             if do_full_research {
-                eval = -self.zw_search::<Node::Zw>(m, &game, &killer, depth - 1, ply + 1, -alpha);
+                eval = -self.zw_search::<Node::Zw>(m, &mut game, &killer, depth - 1, ply + 1, -alpha);
                 self.debug.all_full_zw.inc();
             }
 
             if Node::PV && (children_searched == 0 || alpha < eval) {
-                eval = -self.evaluate_search::<Pv>(m, &game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
+                eval = -self.evaluate_search::<Pv>(m, &mut game, &killer, depth - 1, ply + 1, -beta, -alpha, in_zw);
 
                 self.debug.all_full.inc();
                 if do_full_research {

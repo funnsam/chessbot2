@@ -41,16 +41,16 @@ impl Game {
         Self { board, fifty_move_counter, hash_history }
     }
 
-    pub fn make_null_move(&mut self) -> BoardUnpasser {
-        let un = self.board.pass_move();
+    pub fn make_null_move(&mut self) -> NullMoveRestorer {
+        let un = self.board.null_move();
         self.fifty_move_counter += 1;
         self.hash_history.push(self.board.get_hash());
 
         un
     }
 
-    pub fn unmake_null(&mut self, un: BoardUnpasser) {
-        self.board.restore_passed(un);
+    pub fn unmake_null(&mut self, un: NullMoveRestorer) {
+        self.board.restore_null_move(un);
         self.fifty_move_counter -= 1;
         self.hash_history.pop();
     }
@@ -68,10 +68,10 @@ impl Game {
     pub fn history_len(&self) -> usize { self.hash_history.len() }
 
     pub fn get_fen(&self) -> String {
-        let rfen = self.board().to_string();
         format!(
             "{} {} {}",
-            &rfen[..rfen.len() - 4], self.fifty_move_counter,
+            self.board(),
+            self.fifty_move_counter,
             self.hash_history.len() / 2 + 1,
         )
     }
@@ -87,7 +87,7 @@ impl Game {
                     |p| {
                         let c = self.board().color_on(sq).unwrap();
 
-                        format!("\x1b[1;38;5;{};48;5;{bg}m{}\x1b[0m", 255 - c as u8 * 8, p.to_string(c))
+                        format!("\x1b[1;38;5;{};48;5;{bg}m{}\x1b[0m", 255 - c as u8 * 8, p.to_char(c))
                     }
                 )
             };
@@ -126,9 +126,9 @@ impl core::fmt::Display for Game {
                         let c = self.board().color_on(sq).unwrap();
 
                         if f.alternate() {
-                            format!("\x1b[1;38;5;{};48;5;{bg}m{}\x1b[0m", 255 - c as u8 * 8, p.to_string(c))
+                            format!("\x1b[1;38;5;{};48;5;{bg}m{}\x1b[0m", 255 - c as u8 * 8, p.to_char(c))
                         } else {
-                            p.to_string(c)
+                            p.to_char(c).to_string()
                         }
                     }
                 )
@@ -171,7 +171,7 @@ impl FromStr for Game {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (rest, moves) = s.rsplit_once(' ').ok_or("")?;
         let (_, fmc) = rest.rsplit_once(' ').ok_or("")?;
-        let board = Board::from_fen(false, s).map_err(|_| "")?;
+        let board = Board::from_epd(false, s).map_err(|_| "")?;
         let game_len = moves.parse::<u64>()? * 2 - (board.side_to_move() == Color::White) as u64;
 
         Ok(Self {

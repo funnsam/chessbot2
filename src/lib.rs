@@ -149,7 +149,8 @@ impl Engine {
 
         let mut game = self.game.read().make_move(best);
         while let Some(tte) = self.trans_table.get(game.board().get_hash()) {
-            if tte.next == Move::default() { break }
+            let next = tte.next;
+            if next == Move::default() { break }
 
             pv.push(tte.next);
             game = game.make_move(tte.next);
