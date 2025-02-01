@@ -174,7 +174,7 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
                     return (trans.next, eval, NodeType::None);
                 }
             }
-        } 
+        }
 
         if self.abort() {
             return (Move::default(), Eval(0), NodeType::None);
@@ -235,18 +235,18 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
             if game.board().is_illegal() { continue };
 
             // futility pruning: kill nodes with no potential
-            if !in_check && depth <= 2 {
-                let eval = -evaluate_static(game.board());
-                let margin = 100 * depth as i16 * depth as i16;
+            // if !in_check && depth <= 2 {
+            //     let eval = -evaluate_static(game.board());
+            //     let margin = 100 * depth as i16 * depth as i16;
 
-                if eval.0 + margin < alpha.0 {
-                    if best.0 == Move::default() {
-                        best = (m, eval - margin);
-                    }
+            //     if eval.0 + margin < alpha.0 {
+            //         if best.0 == Move::default() {
+            //             best = (m, eval - margin);
+            //         }
 
-                    continue;
-                }
-            }
+            //         continue;
+            //     }
+            // }
 
             let can_reduce = depth >= 3 && !in_check && children_searched != 0;
 
@@ -315,14 +315,14 @@ impl<const MAIN: bool> SmpThread<'_, MAIN> {
         if children_searched != 0 {
             (best.0, best.1.incr_mate(), if best.1 == alpha { NodeType::All } else { NodeType::Pv })
         } else {
-            (best.0, if in_check { Eval::MIN } else { Eval(0) }, NodeType::None)
+            (best.0, if in_check { -Eval::M0 } else { Eval(0) }, NodeType::None)
         }
     }
 
     fn quiescence_search(&mut self, game: &Game, mut alpha: Eval, beta: Eval) -> Eval {
         let standing_pat = evaluate_static(game.board());
         // TODO: failing to standing pat makes sprt fail, need investigation
-        if standing_pat >= beta { return beta; }
+        if standing_pat >= beta { return standing_pat; }
         alpha = alpha.max(standing_pat);
         let mut best = standing_pat;
 

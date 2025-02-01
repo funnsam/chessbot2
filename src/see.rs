@@ -22,7 +22,7 @@ pub fn see(game: &Game, m: Move) -> i16 {
         let mut from = Bitboard::from(m.from());
         let mut combined = game.board().combined();
         let mut stm = game.board().side_to_move();
-        let mut attadef = game.board().attackers(m.to(), combined);
+        let mut attadef = game.board().attackers(m.to());
         let mut gain = [0; 32];
         gain[0] = PIECE_VALUE[target as usize];
 
